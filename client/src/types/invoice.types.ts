@@ -1,0 +1,20 @@
+export type InvoiceDto = {
+  invoiceNumber: string;
+  paymentId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  razorpayPaymentId?: string;
+  issuedAt: string;
+  schoolName: string;
+  studentName: string;
+  studentClass: string;
+  studentSection: string;
+  admissionId?: string;
+  scholarId?: string;
+  parentName?: string;
+  parentPhone?: string;
+  feeTitle: string;
+  feeType?: string;
+  installmentLabel?: string;
+};

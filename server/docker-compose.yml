@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fee-collection-backend
+    ports:
+      - "${BACKEND_PORT:-5001}:5000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      # Atlas (recommended): provide MONGODB_URI in .env or at runtime.
+      # Example: mongodb+srv://<user>:<pass>@cluster.mongodb.net/fee-collection
+      MONGODB_URI: ${MONGODB_URI}
+    restart: unless-stopped
+
+  # Optional local Mongo for production-like testing only.
+  mongo:
+    image: mongo:7
+    container_name: fee-collection-mongo
+    profiles:
+      - local-mongo
+    ports:
+      - "27017:27017"
+    restart: unless-stopped

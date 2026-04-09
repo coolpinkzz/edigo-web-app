@@ -1,0 +1,33 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: fee-collection-backend-dev
+    ports:
+      - "${BACKEND_PORT:-5001}:5000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      # Keep secrets out of compose files; set this in .env/local env instead.
+      MONGODB_URI: ${MONGODB_URI}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    container_name: fee-collection-mongo-dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

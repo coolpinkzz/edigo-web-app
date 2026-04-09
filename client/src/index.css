@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/**
+ * Teal system: trust, readability, premium (primary / hover / surfaces / text).
+ */
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --color-background: #ffffff;
+  --color-foreground: #0b1320;
+  --color-card: #ffffff;
+  --color-card-foreground: #0b1320;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0b1320;
+  --color-primary: #31998e;
+  --color-primary-hover: #48b8a8;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e0f2f1;
+  --color-secondary-foreground: #0b1320;
+  --color-muted: #e0f2f1;
+  --color-muted-foreground: #3d5a5c;
+  --color-accent: #ccfbf1;
+  --color-accent-foreground: #134e4a;
+  --color-border: #b2dfdb;
+  /** Neutral edge for elevated surfaces (cards, panels). */
+  --color-card-border: #e5e7eb;
+  --color-input: #99f6e4;
+  --color-ring: #48b8a8;
+}
+
+/**
+ * Shared gradient for KPI cards, table headers, and other primary-tinted surfaces.
+ * Matches `bg-linear-to-br from-primary to-primary-hover`.
+ */
+@utility bg-primary-gradient {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--color-primary),
+    var(--color-primary-hover)
+  );
+}
+
+/**
+ * Global base styles. Tailwind handles utilities; keep resets minimal for predictable layout.
+ */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
