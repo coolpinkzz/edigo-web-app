@@ -13,6 +13,8 @@ export const FEE_TYPE_OPTIONS: { value: FeeType; label: string }[] = [
 export interface InstallmentFormRow {
   amount: number
   dueDate: string
+  /** Per-day overdue penalty amount for this installment. */
+  lateFee: number
 }
 
 /** Form values for Create Fee Template. */

@@ -29,4 +29,32 @@ export const env = {
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER ?? "",
   /** ISO 3166-1 alpha-2 for parsing local phone numbers without a + prefix (e.g. IN, US) */
   phoneDefaultRegion: process.env.PHONE_DEFAULT_REGION ?? "IN",
+  /**
+   * When true (default), forgot-password OTP request returns the same message whether
+   * the phone is registered. Set to "false" only for debugging.
+   */
+  authObfuscatePhoneExists: process.env.AUTH_OBFUSCATE_PHONE_EXISTS !== "false",
+  /**
+   * Receives "Book a free demo" submissions from the public landing page.
+   * Override via DEMO_NOTIFICATION_EMAIL.
+   */
+  demoNotificationEmail:
+    process.env.DEMO_NOTIFICATION_EMAIL ?? "pratik.edigo@gmail.com",
+  /** SMTP for outbound demo notifications (e.g. Gmail app password or provider SMTP). */
+  smtpHost: process.env.SMTP_HOST ?? "",
+  smtpPort: parseInt(process.env.SMTP_PORT ?? "587", 10),
+  /** Use true for port 465; false for 587 STARTTLS. */
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  smtpUser: process.env.SMTP_USER ?? "",
+  smtpPass: process.env.SMTP_PASS ?? "",
+  /** From header; defaults to SMTP_USER if unset. */
+  smtpFrom: process.env.SMTP_FROM ?? "",
 } as const;
+
+export function isDemoEmailConfigured(): boolean {
+  return (
+    Boolean(env.smtpHost.trim()) &&
+    Boolean(env.smtpUser.trim()) &&
+    Boolean(env.smtpPass.trim())
+  );
+}

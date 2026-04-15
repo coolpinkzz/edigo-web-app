@@ -1,5 +1,12 @@
 export { apiClient } from "./client";
-export { getAuthMe, login } from "./auth.api";
+export {
+  getAuthMe,
+  login,
+  patchTenant,
+  requestPasswordResetOtp,
+  verifyPasswordResetOtp,
+  resetPasswordAfterOtp,
+} from "./auth.api";
 export {
   createCourse,
   deleteCourse,
@@ -30,6 +37,7 @@ export type {
   StudentFeeOverviewParams,
 } from "./student.api";
 export {
+  addInstallmentsToFee,
   assignTemplateToFees,
   buildFeeLumpSumPaymentPayload,
   buildInstallmentPaymentPayload,
@@ -56,3 +64,5 @@ export {
   listTeamMembers,
   patchTeamMember,
 } from "./team.api";
+export { bookDemoRequest } from "./demo.api";
+export type { BookDemoPayload } from "./demo.api";

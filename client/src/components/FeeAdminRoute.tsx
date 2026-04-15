@@ -12,7 +12,7 @@ type FeeAdminRouteProps = {
 export function FeeAdminRoute({ children }: FeeAdminRouteProps) {
   const role = getRoleFromStorage();
   if (!hasFeeFeatureAccess(role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }

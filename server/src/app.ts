@@ -12,6 +12,7 @@ import reminderRoutes from "./routes/reminder.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import attendanceRoutes from "./routes/attendance.routes";
 import invoiceRoutes from "./routes/invoice.routes";
+import publicRoutes from "./routes/public.routes";
 import { swaggerSpec } from "./config/swagger";
 import { env } from "./config/env";
 import { runInstallmentReminders } from "./modules/reminder/reminder.service";
@@ -36,6 +37,9 @@ app.use(express.urlencoded({ extended: true }));
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
+
+// Public landing (no auth)
+app.use("/public", publicRoutes);
 
 // API root
 app.get("/", (_req: Request, res: Response) => {

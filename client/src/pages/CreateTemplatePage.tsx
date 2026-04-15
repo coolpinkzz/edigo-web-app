@@ -79,8 +79,8 @@ export function CreateTemplatePage() {
       const amounts = total > 0 ? splitEqualAmounts(total, 2) : [0, 0];
       const start = todayISODate();
       replace([
-        { amount: amounts[0] ?? 0, dueDate: start },
-        { amount: amounts[1] ?? 0, dueDate: start },
+        { amount: amounts[0] ?? 0, dueDate: start, lateFee: 0 },
+        { amount: amounts[1] ?? 0, dueDate: start, lateFee: 0 },
       ]);
     }
   }, [isInstallment, fields.length, replace, getValues]);
@@ -123,6 +123,7 @@ export function CreateTemplatePage() {
     const rows = amounts.map((amt) => ({
       amount: amt,
       dueDate: start,
+      lateFee: 0,
     }));
     replace(rows);
   };
@@ -153,7 +154,7 @@ export function CreateTemplatePage() {
 
   if (createdTemplate) {
     return (
-      <div className="mx-auto flex min-h-full max-w-3xl flex-col px-4 py-10">
+      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 py-10">
         <div className="mb-6">
           <Link
             to="/fee-templates"
@@ -208,9 +209,6 @@ export function CreateTemplatePage() {
               title: createdTemplate.title,
               feeType: createdTemplate.feeType,
               totalAmount: createdTemplate.totalAmount,
-              isInstallment: createdTemplate.isInstallment,
-              installmentAnchorDate: createdTemplate.installmentAnchorDate,
-              defaultInstallments: createdTemplate.defaultInstallments,
             }}
             cancelLabel="Skip for now"
             cancelHref="/fee-templates?created=1"
@@ -221,11 +219,11 @@ export function CreateTemplatePage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center px-4 py-10">
-      <Card className="w-full transition-shadow duration-300">
-        <div className="mb-6">
+    <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-4 py-10">
+      <Card className="w-full lg:p-8">
+        <div className="mb-6 lg:mb-8">
           <CardTitle>Create fee structure</CardTitle>
-          <CardDescription>
+          <CardDescription className="mt-2 max-w-3xl text-pretty">
             Define a reusable fee definition. After you create it, you can
             assign it to students on the next step. Installments use dates here;
             the API stores them as days relative to the earliest date.
@@ -233,55 +231,59 @@ export function CreateTemplatePage() {
         </div>
 
         <form
-          className="space-y-6"
+          className="space-y-6 lg:space-y-8"
           onSubmit={handleSubmit(onSubmit)}
           noValidate
         >
-          <Input
-            label="Title"
-            {...register("title", { required: "Title is required" })}
-            error={errors.title?.message}
-          />
-
-          <Controller
-            name="feeType"
-            control={control}
-            rules={{ required: "Fee type is required" }}
-            render={({ field }) => (
-              <SelectField
-                label="Fee type"
-                name={field.name}
-                options={FEE_TYPE_OPTIONS.map((o) => ({
-                  value: o.value,
-                  label: o.label,
-                }))}
-                value={field.value}
-                onValueChange={field.onChange}
-                onBlur={field.onBlur}
-                error={errors.feeType?.message}
+          <div className="grid gap-6 lg:grid-cols-2 lg:gap-x-8 lg:gap-y-6">
+            <div className="lg:col-span-2">
+              <Input
+                label="Title"
+                {...register("title", { required: "Title is required" })}
+                error={errors.title?.message}
               />
-            )}
-          />
+            </div>
 
-          <Input
-            label="Total amount"
-            type="number"
-            step="0.01"
-            min={0}
-            {...register("totalAmount", {
-              required: "Total amount is required",
-              min: { value: 0.01, message: "Must be greater than 0" },
-              valueAsNumber: true,
-            })}
-            error={errors.totalAmount?.message}
-          />
+            <Controller
+              name="feeType"
+              control={control}
+              rules={{ required: "Fee type is required" }}
+              render={({ field }) => (
+                <SelectField
+                  label="Fee type"
+                  name={field.name}
+                  options={FEE_TYPE_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: o.label,
+                  }))}
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                  error={errors.feeType?.message}
+                />
+              )}
+            />
 
-          <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/80 px-4 py-3 shadow-sm shadow-black/[0.04]">
+            <Input
+              label="Total amount"
+              type="number"
+              step="0.01"
+              min={0}
+              {...register("totalAmount", {
+                required: "Total amount is required",
+                min: { value: 0.01, message: "Must be greater than 0" },
+                valueAsNumber: true,
+              })}
+              error={errors.totalAmount?.message}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-lg bg-primary-gradient px-4 py-3 shadow-sm shadow-black/[0.04]">
             <div>
-              <p className="text-sm font-medium text-foreground/90">
+              <p className="text-sm font-medium text-primary-foreground">
                 Installment plan
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-primary-foreground">
                 Split into multiple scheduled payments
               </p>
             </div>
@@ -296,7 +298,7 @@ export function CreateTemplatePage() {
                   onClick={() => field.onChange(!field.value)}
                   className={cn(
                     "relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    field.value ? "bg-primary" : "bg-muted-foreground/30",
+                    field.value ? "bg-primary" : "bg-primary-foreground/30",
                   )}
                 >
                   <span
@@ -313,21 +315,22 @@ export function CreateTemplatePage() {
           {!isInstallment && (
             <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
               <Input
+                className="bg-primary-foreground"
                 type="date"
                 label="Default due date (optional)"
                 {...register("defaultEndDate")}
               />
               <p className="text-xs text-muted-foreground">
-                Saved on this fee structure. When you assign it to a student, new
-                lump-sum fees get this due date (IST) unless you override at
+                Saved on this fee structure. When you assign it to a student,
+                new lump-sum fees get this due date (IST) unless you override at
                 assignment time. Unpaid fees become overdue after this date.
               </p>
             </div>
           )}
 
           {isInstallment && (
-            <div className="space-y-4 rounded-xl bg-primary/5 p-4 shadow-md shadow-primary/10 transition-all duration-300">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-4 rounded-xl bg-primary/5 p-4 shadow-md shadow-primary/10 transition-all duration-300 lg:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">
                     Installments
@@ -363,7 +366,7 @@ export function CreateTemplatePage() {
                     type="button"
                     variant="secondary"
                     onClick={() =>
-                      append({ amount: 0, dueDate: todayISODate() })
+                      append({ amount: 0, dueDate: todayISODate(), lateFee: 0 })
                     }
                   >
                     + Add
@@ -375,9 +378,9 @@ export function CreateTemplatePage() {
                 {fields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="flex flex-col gap-3 rounded-lg border border-card-border bg-card p-3 shadow-md shadow-black/[0.06] transition-all duration-200 ease-out sm:flex-row sm:items-start"
+                    className="flex flex-col gap-3 rounded-lg border border-card-border bg-card p-3 shadow-md shadow-black/[0.06] transition-all duration-200 ease-out sm:flex-row sm:items-end"
                   >
-                    <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
                       <Input
                         label={`Amount ${index + 1}`}
                         type="number"
@@ -397,6 +400,17 @@ export function CreateTemplatePage() {
                           required: "Due date is required",
                         })}
                         error={errors.installments?.[index]?.dueDate?.message}
+                      />
+                      <Input
+                        label="Late fee / day"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        {...register(`installments.${index}.lateFee` as const, {
+                          min: { value: 0, message: "Cannot be negative" },
+                          valueAsNumber: true,
+                        })}
+                        error={errors.installments?.[index]?.lateFee?.message}
                       />
                     </div>
                     <Button

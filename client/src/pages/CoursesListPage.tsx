@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createCourse, deleteCourse, updateCourse } from "../api/course.api";
+import { ConfirmationModal } from "../components/ConfirmationModal";
 import {
   Button,
   Card,
@@ -25,6 +26,10 @@ export function CoursesListPage() {
   const [name, setName] = useState("");
   const [shortCode, setShortCode] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -63,10 +68,35 @@ export function CoursesListPage() {
     createMutation.mutate();
   };
 
+  const confirmDeleteCourse = () => {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
+
   const rows = data?.data ?? [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      <ConfirmationModal
+        open={deleteTarget != null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete course?"
+        description={
+          deleteTarget ? (
+            <>
+              Delete “<strong>{deleteTarget.name}</strong>”? This only works if
+              no students use it.
+            </>
+          ) : null
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        isConfirming={deleteMutation.isPending}
+        onConfirm={confirmDeleteCourse}
+      />
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Courses</h1>
         <p className="text-sm text-muted-foreground">
@@ -188,15 +218,9 @@ export function CoursesListPage() {
                           type="button"
                           className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
                           disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Delete “${c.name}”? This only works if no students use it.`,
-                              )
-                            ) {
-                              deleteMutation.mutate(c.id);
-                            }
-                          }}
+                          onClick={() =>
+                            setDeleteTarget({ id: c.id, name: c.name })
+                          }
                         >
                           Delete
                         </button>

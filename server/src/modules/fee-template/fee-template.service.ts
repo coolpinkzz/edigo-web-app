@@ -35,6 +35,8 @@ export interface FeeAssignmentOverrides {
   startDate?: Date;
   endDate?: Date;
   tags?: string[];
+  /** Discount percentage on principal totalAmount (0-100), applied at assignment snapshot time. */
+  discount?: number;
 }
 
 const MAX_ASSIGN_BY_IDS = 500;
@@ -146,6 +148,23 @@ function mergeAssignmentOverrides(
       parseTemplateYmdIst(template.defaultEndDate),
     tags: perStudent?.tags ?? global?.tags ?? template.tags,
   };
+}
+
+function resolvePrincipalDiscountPercent(
+  global?: FeeAssignmentOverrides,
+  perStudent?: FeeAssignmentOverrides,
+): number {
+  const raw = perStudent?.discount ?? global?.discount ?? 0;
+  if (!Number.isFinite(raw)) {
+    throw new Error("discount must be a finite number");
+  }
+  if (raw < 0) {
+    throw new Error("discount cannot be negative");
+  }
+  if (raw > 100) {
+    throw new Error("discount cannot exceed 100%");
+  }
+  return raw;
 }
 
 async function loadTemplateOrThrow(
@@ -444,6 +463,10 @@ export async function assignFeeTemplateToStudents(
     studentId,
     merged: mergeAssignmentOverrides(
       template,
+      input.feeOverrides,
+      input.perStudentOverrides?.[studentId],
+    ),
+    principalDiscountPercent: resolvePrincipalDiscountPercent(
       input.feeOverrides,
       input.perStudentOverrides?.[studentId],
     ),

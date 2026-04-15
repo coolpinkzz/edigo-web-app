@@ -59,11 +59,18 @@ export async function assignTemplate(req: Request, res: Response): Promise<void>
       tenantId,
       body.templateId,
       {
-      assignmentType: body.assignmentType,
-      studentIds: body.studentIds,
-      class: body.class as feeTemplateService.AssignTemplateInput["class"],
-      section: body.section,
-      customInstallments: body.customInstallments,
+        assignmentType: body.assignmentType,
+        studentIds: body.studentIds,
+        class: body.class as feeTemplateService.AssignTemplateInput["class"],
+        section: body.section,
+        customInstallments: body.customInstallments,
+        perStudentOverrides: body.perStudentDiscounts
+          ? Object.fromEntries(
+              Object.entries(body.perStudentDiscounts).map(
+                ([studentId, discount]) => [studentId, { discount }],
+              ),
+            )
+          : undefined,
       },
     );
 

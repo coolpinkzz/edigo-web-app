@@ -18,8 +18,8 @@ export function earliestDueDateString(
 }
 
 export function buildDefaultInstallments(
-  rows: { amount: number; dueDate: string }[],
-): { amount: number; dueInDays: number }[] {
+  rows: { amount: number; dueDate: string; lateFee?: number }[],
+): { amount: number; dueInDays: number; lateFee: number }[] {
   if (rows.length === 0) return []
   const parse = (d: string) => {
     const t = ymdToBusinessMidnightMs(d)
@@ -30,6 +30,7 @@ export function buildDefaultInstallments(
   return sorted.map((row) => ({
     amount: row.amount,
     dueInDays: Math.max(0, Math.round((parse(row.dueDate) - ref) / DAY_MS)),
+    lateFee: Math.max(0, Number(row.lateFee ?? 0)),
   }))
 }
 
@@ -63,13 +64,14 @@ export function addDaysToISODate(iso: string, days: number): string {
  * Uses today as day 0 so relative spacing matches what the server stores.
  */
 export function defaultInstallmentsToFormRows(
-  rows: { amount: number; dueInDays: number }[],
-): { amount: number; dueDate: string }[] {
+  rows: { amount: number; dueInDays: number; lateFee?: number }[],
+): { amount: number; dueDate: string; lateFee: number }[] {
   if (rows.length === 0) return []
   const sorted = [...rows].sort((a, b) => a.dueInDays - b.dueInDays)
   const base = todayISODate()
   return sorted.map((row) => ({
     amount: row.amount,
     dueDate: addDaysToISODate(base, row.dueInDays),
+    lateFee: Math.max(0, Number(row.lateFee ?? 0)),
   }))
 }

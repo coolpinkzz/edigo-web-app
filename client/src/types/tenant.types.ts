@@ -15,3 +15,11 @@ export interface AuthMeResponse {
     tenantType: TenantType;
   };
 }
+
+/** PATCH /auth/tenant — updated tenant metadata. */
+export interface PatchTenantResponse {
+  tenant: {
+    name: string;
+    tenantType: TenantType;
+  };
+}

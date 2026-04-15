@@ -7,8 +7,17 @@ import {
   inviteRateLimit,
   loginRateLimit,
   signupRateLimit,
+  passwordResetOtpRequestRateLimit,
+  passwordResetOtpVerifyRateLimit,
+  passwordResetSubmitRateLimit,
 } from "../middleware/rate-limit.middleware";
 import { validate } from "../middleware/validate.middleware";
+import {
+  patchTenantBody,
+  requestPasswordResetOtpBody,
+  verifyPasswordResetOtpBody,
+  resetPasswordAfterOtpBody,
+} from "../modules/auth/auth.validation";
 import { requireTenantAdmin } from "../middleware/rbac.middleware";
 import * as authService from "../modules/auth/auth.service";
 import { ROLES, Role } from "../types/roles";
@@ -215,9 +224,109 @@ const router = Router();
  *         description: Missing or invalid token
  */
 
+/**
+ * @openapi
+ * /auth/request-otp:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Request password reset OTP (SMS)
+ *     description: Sends a 6-digit code if the phone is registered for the tenant. Same response when obfuscation is enabled (default).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [phone, tenantSlug]
+ *             properties:
+ *               phone:
+ *                 type: string
+ *               tenantSlug:
+ *                 type: string
+ *                 description: Organization slug (same as login)
+ *     responses:
+ *       200:
+ *         description: Generic success message (see description)
+ *       400:
+ *         description: Invalid phone or tenant (when obfuscation disabled)
+ *       503:
+ *         description: SMS provider unavailable
+ * /auth/verify-otp:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Verify password reset OTP
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [phone, tenantSlug, otp]
+ *             properties:
+ *               phone: { type: string }
+ *               tenantSlug: { type: string }
+ *               otp: { type: string, pattern: '^\\d{6}$' }
+ *     responses:
+ *       200:
+ *         description: OTP verified; proceed to reset password within the time window
+ *       400:
+ *         description: Invalid or expired code
+ *       429:
+ *         description: Too many wrong attempts or rate limit
+ * /auth/reset-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Set new password after OTP verification
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [phone, tenantSlug, newPassword]
+ *             properties:
+ *               phone: { type: string }
+ *               tenantSlug: { type: string }
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       200:
+ *         description: Password updated
+ *       400:
+ *         description: Weak password or verification expired
+ */
+
 /** Public routes */
 router.post("/signup", signupRateLimit, authController.signup);
 router.post("/login", loginRateLimit, authController.login);
+
+router.post(
+  "/request-otp",
+  passwordResetOtpRequestRateLimit,
+  validate({ body: requestPasswordResetOtpBody }),
+  (req, res) => {
+    void authController.requestPasswordResetOtp(req, res);
+  },
+);
+
+router.post(
+  "/verify-otp",
+  passwordResetOtpVerifyRateLimit,
+  validate({ body: verifyPasswordResetOtpBody }),
+  (req, res) => {
+    void authController.verifyPasswordResetOtp(req, res);
+  },
+);
+
+router.post(
+  "/reset-password",
+  passwordResetSubmitRateLimit,
+  validate({ body: resetPasswordAfterOtpBody }),
+  (req, res) => {
+    void authController.resetPassword(req, res);
+  },
+);
 
 /** Protected: invite user to tenant (tenant admin only) */
 router.post(
@@ -256,6 +365,17 @@ router.post(
 router.get("/me", authenticate, (req, res) => {
   void authController.me(req, res);
 });
+
+/** Tenant admin: update organization display name */
+router.patch(
+  "/tenant",
+  authenticate,
+  requireTenantAdmin,
+  validate({ body: patchTenantBody }),
+  (req, res) => {
+    void authController.patchTenant(req, res);
+  },
+);
 
 /** Tenant admin: list team members */
 router.get("/team", authenticate, requireTenantAdmin, (req, res) => {

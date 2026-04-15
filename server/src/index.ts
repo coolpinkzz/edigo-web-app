@@ -5,10 +5,12 @@ import { env } from "./config/env";
 import { BUSINESS_TIMEZONE } from "./config/timezone";
 import { runInstallmentReminders } from "./modules/reminder/reminder.service";
 import { runSettlementSyncJob } from "./modules/settlement/settlement.service";
+import { verifyDemoEmailOnStartup } from "./modules/public/demo-request.service";
 import { logger } from "./utils/logger";
 
 async function bootstrap(): Promise<void> {
   await connectDB();
+  await verifyDemoEmailOnStartup();
 
   // Daily 08:00 IST — fee SMS reminders (installments + lump-sum due within 3 days or overdue)
   cron.schedule(

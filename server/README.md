@@ -1,4 +1,4 @@
-# EduRapid Server
+# Edigo Server
 
 Express + TypeScript + MongoDB API boilerplate.
 
@@ -43,6 +43,7 @@ npm start
 
 - `GET /health` - Health check
 - `GET /` - API info
+- `POST /public/book-demo` - Landing “Book a free demo” form (sends email to `DEMO_NOTIFICATION_EMAIL`; requires SMTP env vars)
 - `POST /auth/signup` - Create tenant + admin user
 - `POST /auth/login` - Login (returns JWT)
 

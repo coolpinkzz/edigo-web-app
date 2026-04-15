@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { FeeStatusBadge } from "../components/FeeStatusBadge";
 import {
   Button,
   Card,
@@ -22,7 +23,6 @@ import { useUpdateFeePayment } from "../hooks/useUpdateFeePayment";
 import { useUpdateInstallment } from "../hooks/useUpdateInstallment";
 import type {
   FeeDto,
-  FeeStatus,
   InstallmentDto,
   ManualPaymentMethod,
   PatchFeePayload,
@@ -61,19 +61,6 @@ function isoToDateInput(iso: string | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return businessDayKey(d);
-}
-
-function statusBadgeClass(status: FeeStatus): string {
-  switch (status) {
-    case "PAID":
-      return "bg-accent text-accent-foreground";
-    case "OVERDUE":
-      return "bg-red-100 text-red-900";
-    case "PARTIAL":
-      return "bg-amber-100 text-amber-900";
-    default:
-      return "bg-muted text-foreground/90";
-  }
 }
 
 async function copyText(text: string): Promise<void> {
@@ -388,6 +375,13 @@ export function StudentDetailPage() {
                 <tbody className="divide-y divide-border/60">
                   {feesData.data.map((fee) => {
                     const isOpen = expandedFeeId === fee.id;
+                    const detailFee =
+                      isOpen &&
+                      feeDetailQuery.data?.fee?.id === fee.id &&
+                      feeDetailQuery.data.fee
+                        ? feeDetailQuery.data.fee
+                        : null;
+                    const parentStatus = detailFee?.status ?? fee.status;
                     return (
                       <Fragment key={fee.id}>
                         <tr
@@ -417,14 +411,13 @@ export function StudentDetailPage() {
                             {fee.feeType}
                           </td>
                           <td className="px-4 py-3">
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                                statusBadgeClass(fee.status),
-                              )}
+                            <FeeStatusBadge
+                              status={parentStatus}
+                              variant="compact"
+                              className="text-xs"
                             >
-                              {fee.status}
-                            </span>
+                              {parentStatus}
+                            </FeeStatusBadge>
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums text-foreground">
                             {formatMoney(fee.totalAmount)}
@@ -686,16 +679,13 @@ export function StudentDetailPage() {
                                                     )}
                                                   </td>
                                                   <td className="px-4 py-2">
-                                                    <span
-                                                      className={cn(
-                                                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                                                        statusBadgeClass(
-                                                          inst.status,
-                                                        ),
-                                                      )}
+                                                    <FeeStatusBadge
+                                                      status={inst.status}
+                                                      variant="compact"
+                                                      className="text-xs"
                                                     >
                                                       {inst.status}
-                                                    </span>
+                                                    </FeeStatusBadge>
                                                   </td>
                                                   <td className="px-4 py-2 text-right">
                                                     <button

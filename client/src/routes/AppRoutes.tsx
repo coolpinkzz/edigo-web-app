@@ -12,23 +12,26 @@ import { CoursesListPage } from "../pages/CoursesListPage";
 import { CreateTemplatePage } from "../pages/CreateTemplatePage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { FeeOverviewPage } from "../pages/FeeOverviewPage";
+import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
 import { LoginPage } from "../pages/LoginPage";
 import { StudentDetailPage } from "../pages/StudentDetailPage";
 import { StudentFormPage } from "../pages/StudentFormPage";
 import { StudentImportPage } from "../pages/StudentImportPage";
 import { StudentsListPage } from "../pages/StudentsListPage";
 import { OverduePage } from "../pages/OverduePage";
+import { SettingsPage } from "../pages/SettingsPage";
 import { TeamManagementPage } from "../pages/TeamManagementPage";
 import { TemplatesListPage } from "../pages/TemplatesListPage";
 import { PaymentAlreadyPaidPage } from "../pages/PaymentAlreadyPaidPage";
 import { PaymentSuccessPage } from "../pages/PaymentSuccessPage";
-import { ComingSoonPage } from "../pages/ComingSoonPage";
+import { LandingPage } from "../pages/LandingPage";
 
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<ComingSoonPage />} />
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route
         path="/payment-already-paid"
         element={<PaymentAlreadyPaidPage />}
@@ -74,6 +77,14 @@ export function AppRoutes() {
             element={
               <AdminOnlyRoute>
                 <TeamManagementPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <AdminOnlyRoute>
+                <SettingsPage />
               </AdminOnlyRoute>
             }
           />

@@ -8,11 +8,13 @@ import {
   LayoutDashboard,
   Layers,
   LogOut,
+  Settings,
   UserCog,
   Users,
   Wallet,
 } from "lucide-react";
 import { Button } from "../components/ui";
+import logoUrl from "../assets/logo.png";
 import { useAuthSession } from "../hooks/useAuthSession";
 import {
   clearAccessToken,
@@ -104,12 +106,20 @@ export function MainLayout() {
                           ? "Create fee structure"
                           : pathname.startsWith("/fee-templates")
                             ? "Fee structures"
-                            : pathname.startsWith("/courses")
-                              ? "Courses"
-                              : "Dashboard";
+                    : pathname.startsWith("/courses")
+                      ? "Courses"
+                      : pathname === "/settings"
+                        ? "Settings"
+                        : "Dashboard";
+
+  const headerTitle =
+    pathname === "/settings"
+      ? "Settings"
+      : sessionQuery.data?.tenant?.name ?? title;
 
   const navLink = (to: string, label: string, Icon: LucideIcon) => {
-    const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
+    const active =
+      to === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(to);
     return (
       <Link
         to={to}
@@ -129,18 +139,32 @@ export function MainLayout() {
   return (
     <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
       <aside className="flex h-full min-h-0 w-56 shrink-0 flex-col overflow-hidden border-r border-border bg-card">
-        <div className="shrink-0 border-b border-border px-4 py-4">
-          <span className="text-sm font-semibold tracking-tight">EduRapid</span>
+        <div className="shrink-0 px-4 py-4">
+          <Link to="/dashboard" className="flex items-center gap-2">
+            <img
+              src={logoUrl}
+              alt=""
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0 object-contain"
+            />
+            <span className="font-brand bg-primary-gradient bg-clip-text text-xl font-semibold tracking-tight text-transparent">
+              Edigo
+            </span>
+          </Link>
         </div>
         <nav className="flex min-h-0 flex-1 flex-col justify-start gap-1 overflow-hidden p-3">
-          {showDashboardStudents && navLink("/", "Dashboard", LayoutDashboard)}
+          {showDashboardStudents &&
+            navLink("/dashboard", "Dashboard", LayoutDashboard)}
           {showFeeNav && navLink("/fee-overview", "Fee overview", Wallet)}
           {showFeeNav && navLink("/overdue", "Overdue fees", AlertTriangle)}
-          {isSchoolTenant && navLink("/attendance", "Attendance", ClipboardCheck)}
+          {isSchoolTenant &&
+            navLink("/attendance", "Attendance", ClipboardCheck)}
           {showDashboardStudents && navLink("/students", "Students", Users)}
           {showCoursesNav && navLink("/courses", "Courses", BookOpen)}
           {showTeamManagement &&
             navLink("/team-management", "Team management", UserCog)}
+          {showTeamManagement && navLink("/settings", "Settings", Settings)}
           {showFeeNav && navLink("/fee-templates", "Fee structures", Layers)}
         </nav>
         <div className="shrink-0 border-t border-border p-3">
@@ -179,7 +203,7 @@ export function MainLayout() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <header className="shrink-0 border-b border-border bg-card px-6 py-4">
           <h1 className="text-lg font-semibold text-foreground">
-            {sessionQuery.data?.tenant?.name ?? title}
+            {headerTitle}
           </h1>
         </header>
         <main className="min-h-0 flex-1 p-6">

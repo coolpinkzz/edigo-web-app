@@ -12,6 +12,8 @@ export interface IInstallment extends Document {
   status: FeeStatus;
 
   lateFee: number;
+  /** Paid portion of accrued late fee (same currency unit as amount). */
+  lateFeePaid: number;
   discount: number;
 
   metadata?: Record<string, unknown>;
@@ -37,6 +39,7 @@ const InstallmentSchema = new Schema<IInstallment>(
     },
 
     lateFee: { type: Number, default: 0 },
+    lateFeePaid: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
 
     metadata: {

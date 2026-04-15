@@ -84,6 +84,7 @@ const customInstallmentRowSchema = Joi.object({
 
 const feeAssignmentSchema = Joi.object({
   templateId: feeAssignmentTemplateIdField,
+  discount: Joi.number().min(0).max(100).optional(),
   useCustomInstallments: Joi.boolean().default(false),
   customInstallments: Joi.array()
     .items(customInstallmentRowSchema)
@@ -341,6 +342,8 @@ export interface CreateStudentBody {
   };
   feeAssignment?: {
     templateId: string;
+    /** Optional principal discount percentage (0-100). */
+    discount?: number;
     useCustomInstallments?: boolean;
     customInstallments?: {
       amount: number;

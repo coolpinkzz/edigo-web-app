@@ -159,6 +159,7 @@ function serializeInstallment(doc: IInstallment) {
     dueDate: doc.dueDate,
     status,
     lateFee: doc.lateFee,
+    lateFeePaid: doc.lateFeePaid ?? 0,
     discount: doc.discount,
     metadata: doc.metadata,
     createdAt: doc.createdAt,
@@ -194,6 +195,25 @@ export function serializeFee(doc: IFee) {
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
+}
+
+/** Same rules as GET /fees/:id — status from installment due dates, not stale DB. */
+export function deriveFeeStatusFromInstallmentRows(
+  fee: IFee,
+  insts: IInstallment[],
+): FeeStatus {
+  if (insts.length === 0) return fee.status;
+  const sumPaid = insts.reduce((s, i) => s + i.paidAmount, 0);
+  const pendingAmount = clampNonNegative(fee.totalAmount - sumPaid);
+  return deriveFeeStatus(fee.totalAmount, sumPaid, pendingAmount, {
+    isInstallment: true,
+    endDate: fee.endDate,
+    installments: insts.map((i) => ({
+      dueDate: i.dueDate,
+      amount: i.amount,
+      paidAmount: i.paidAmount,
+    })),
+  });
 }
 
 function clampNonNegative(n: number): number {
@@ -464,6 +484,76 @@ function validateCustomAssignmentInstallments(
   }
 }
 
+type TemplateAssignmentInstallmentSnapshotRow = {
+  amount: number;
+  dueDate: Date;
+  lateFee: number;
+  discount: number;
+  metadata?: Record<string, unknown>;
+};
+
+function toPaise(rupees: number): number {
+  return Math.round(rupees * 100);
+}
+
+function fromPaise(paise: number): number {
+  return paise / 100;
+}
+
+/**
+ * Keeps due dates/metadata unchanged and apportions principal by weight so rows sum exactly.
+ */
+function scaleInstallmentRowsForTargetTotal(
+  baseRows: TemplateAssignmentInstallmentSnapshotRow[],
+  baseTotalAmount: number,
+  targetTotalAmount: number,
+): TemplateAssignmentInstallmentSnapshotRow[] {
+  if (baseRows.length === 0) {
+    return [];
+  }
+  if (Math.abs(targetTotalAmount - baseTotalAmount) <= 1e-9) {
+    return baseRows;
+  }
+
+  const targetTotalPaise = toPaise(targetTotalAmount);
+  const baseTotalPaise = toPaise(baseTotalAmount);
+  if (baseTotalPaise <= 0) {
+    throw new Error("Installment base totalAmount must be positive");
+  }
+
+  const basePaiseRows = baseRows.map((row) => ({
+    ...row,
+    amountPaise: toPaise(row.amount),
+  }));
+
+  const alloc = basePaiseRows.map((row, idx) => {
+    const raw = (row.amountPaise * targetTotalPaise) / baseTotalPaise;
+    const floor = Math.floor(raw);
+    return { idx, floor, frac: raw - floor };
+  });
+
+  let assigned = alloc.reduce((s, a) => s + a.floor, 0);
+  let remaining = targetTotalPaise - assigned;
+  alloc.sort((a, b) => b.frac - a.frac);
+  for (let i = 0; i < alloc.length && remaining > 0; i++) {
+    alloc[i]!.floor += 1;
+    remaining -= 1;
+    assigned += 1;
+  }
+  if (remaining !== 0 || assigned !== targetTotalPaise) {
+    throw new Error("Failed to apportion discounted installment amounts");
+  }
+
+  alloc.sort((a, b) => a.idx - b.idx);
+  return alloc.map((a) => {
+    const row = baseRows[a.idx]!;
+    return {
+      ...row,
+      amount: fromPaise(a.floor),
+    };
+  });
+}
+
 /**
  * Persists a fee (+ installments when applicable) from a template snapshot.
  * No runtime dependency on the template after this returns; fee is a full copy.
@@ -476,8 +566,26 @@ export async function createFeeFromTemplateSnapshot(
   merged: ReturnType<typeof mergeFeeTemplateOverrides>,
   session: ClientSession | null,
   customInstallments?: CustomAssignmentInstallmentRow[],
+  principalDiscountPercent?: number,
 ): Promise<ReturnType<typeof serializeFee>> {
   const opts = session ? { session } : {};
+  const discountPercent = principalDiscountPercent ?? 0;
+  if (!Number.isFinite(discountPercent)) {
+    throw new Error("principalDiscountPercent must be a finite number");
+  }
+  if (discountPercent < 0) {
+    throw new Error("principalDiscountPercent cannot be negative");
+  }
+  if (discountPercent > 100) {
+    throw new Error("principalDiscountPercent cannot exceed 100");
+  }
+
+  const templateTotalPaise = toPaise(template.totalAmount);
+  const discountPaise = Math.round((templateTotalPaise * discountPercent) / 100);
+  const discountedTotal = fromPaise(
+    clampNonNegative(templateTotalPaise - discountPaise),
+  );
+
   const [fee] = (await Fee.create(
     [
       {
@@ -490,11 +598,11 @@ export async function createFeeFromTemplateSnapshot(
         feeType: template.feeType,
         category: merged.category,
         metadata: merged.metadata,
-        totalAmount: template.totalAmount,
+        totalAmount: discountedTotal,
         paidAmount: 0,
-        pendingAmount: template.totalAmount,
+        pendingAmount: discountedTotal,
         isInstallment: false,
-        status: deriveFeeStatus(template.totalAmount, 0, template.totalAmount, {
+        status: deriveFeeStatus(discountedTotal, 0, discountedTotal, {
           isInstallment: false,
           endDate: merged.endDate,
         }),
@@ -519,7 +627,8 @@ export async function createFeeFromTemplateSnapshot(
     validateCustomAssignmentInstallments(customInstallments, template.totalAmount);
   }
 
-  const installmentRows = customInstallments?.length
+  const baseInstallmentRows: TemplateAssignmentInstallmentSnapshotRow[] =
+    customInstallments?.length
     ? customInstallments.map((row) => ({
         amount: row.amount,
         dueDate: row.dueDate,
@@ -534,6 +643,11 @@ export async function createFeeFromTemplateSnapshot(
         discount: row.discount ?? 0,
         metadata: row.metadata,
       }));
+  const installmentRows = scaleInstallmentRowsForTargetTotal(
+    baseInstallmentRows,
+    template.totalAmount,
+    discountedTotal,
+  );
 
   for (const row of installmentRows) {
     const paid = 0;
@@ -575,7 +689,11 @@ export async function createFeeFromTemplateSnapshot(
 export async function bulkCreateFeesFromTemplateSnapshot(
   tenantId: string,
   template: IFeeTemplate,
-  rows: Array<{ studentId: string; merged: FeeTemplateMergedSnapshot }>,
+  rows: Array<{
+    studentId: string;
+    merged: FeeTemplateMergedSnapshot;
+    principalDiscountPercent?: number;
+  }>,
   anchor: Date,
   session: ClientSession,
   customInstallments?: CustomAssignmentInstallmentRow[],
@@ -587,28 +705,51 @@ export async function bulkCreateFeesFromTemplateSnapshot(
 
   const templateIdStr = template._id.toString();
 
-  const feePayloads = rows.map(({ studentId, merged }) => ({
-    tenantId,
-    studentId,
-    source: "TEMPLATE" as const,
-    templateId: templateIdStr,
-    title: merged.title,
-    description: merged.description,
-    feeType: template.feeType,
-    category: merged.category,
-    metadata: merged.metadata,
-    totalAmount: template.totalAmount,
-    paidAmount: 0,
-    pendingAmount: template.totalAmount,
-    isInstallment: false,
-    status: deriveFeeStatus(template.totalAmount, 0, template.totalAmount, {
-      isInstallment: false,
-      endDate: merged.endDate,
-    }),
-    startDate: merged.startDate,
-    endDate: merged.endDate,
-    tags: merged.tags,
-  }));
+  const feePayloads = rows.map(
+    ({ studentId, merged, principalDiscountPercent }) => {
+      const discountPercent = principalDiscountPercent ?? 0;
+      if (!Number.isFinite(discountPercent)) {
+        throw new Error("principalDiscountPercent must be a finite number");
+      }
+      if (discountPercent < 0) {
+        throw new Error("principalDiscountPercent cannot be negative");
+      }
+      if (discountPercent > 100) {
+        throw new Error("principalDiscountPercent cannot exceed 100");
+      }
+
+      const templateTotalPaise = toPaise(template.totalAmount);
+      const discountPaise = Math.round(
+        (templateTotalPaise * discountPercent) / 100,
+      );
+      const discountedTotal = fromPaise(
+        clampNonNegative(templateTotalPaise - discountPaise),
+      );
+
+      return {
+        tenantId,
+        studentId,
+        source: "TEMPLATE" as const,
+        templateId: templateIdStr,
+        title: merged.title,
+        description: merged.description,
+        feeType: template.feeType,
+        category: merged.category,
+        metadata: merged.metadata,
+        totalAmount: discountedTotal,
+        paidAmount: 0,
+        pendingAmount: discountedTotal,
+        isInstallment: false,
+        status: deriveFeeStatus(discountedTotal, 0, discountedTotal, {
+          isInstallment: false,
+          endDate: merged.endDate,
+        }),
+        startDate: merged.startDate,
+        endDate: merged.endDate,
+        tags: merged.tags,
+      };
+    },
+  );
 
   const inserted = (await Fee.insertMany(feePayloads, { session })) as IFee[];
 
@@ -625,7 +766,8 @@ export async function bulkCreateFeesFromTemplateSnapshot(
     validateCustomAssignmentInstallments(customInstallments, template.totalAmount);
   }
 
-  const baseInstallmentRows = customInstallments?.length
+  const baseInstallmentRows: TemplateAssignmentInstallmentSnapshotRow[] =
+    customInstallments?.length
     ? customInstallments.map((row) => ({
         amount: row.amount,
         dueDate: row.dueDate,
@@ -652,9 +794,15 @@ export async function bulkCreateFeesFromTemplateSnapshot(
     metadata?: Record<string, unknown>;
   }> = [];
 
-  for (const fee of inserted) {
+  for (let i = 0; i < inserted.length; i++) {
+    const fee = inserted[i]!;
     const fid = fee._id.toString();
-    for (const row of baseInstallmentRows) {
+    const perFeeRows = scaleInstallmentRowsForTargetTotal(
+      baseInstallmentRows,
+      template.totalAmount,
+      fee.totalAmount,
+    );
+    for (const row of perFeeRows) {
       const paid = 0;
       const st = deriveInstallmentStatus(row.amount, paid, row.dueDate);
       instRows.push({
@@ -1003,8 +1151,38 @@ export async function listFees(
 
   const totalPages = total === 0 ? 0 : Math.ceil(total / params.limit);
 
+  const installmentFeeIds = docs
+    .filter((d) => d.isInstallment)
+    .map((d) => d._id.toString());
+
+  const instByFeeId = new Map<string, IInstallment[]>();
+  if (installmentFeeIds.length > 0) {
+    const allInsts = await Installment.find({
+      feeId: { $in: installmentFeeIds },
+    })
+      .sort({ dueDate: 1 })
+      .exec();
+    for (const inst of allInsts) {
+      const fid = inst.feeId;
+      const arr = instByFeeId.get(fid) ?? [];
+      arr.push(inst);
+      instByFeeId.set(fid, arr);
+    }
+  }
+
+  const data = docs.map((doc) => {
+    const base = serializeFee(doc);
+    if (!doc.isInstallment) return base;
+    const insts = instByFeeId.get(doc._id.toString()) ?? [];
+    if (insts.length === 0) return base;
+    return {
+      ...base,
+      status: deriveFeeStatusFromInstallmentRows(doc, insts),
+    };
+  });
+
   return {
-    data: docs.map(serializeFee),
+    data,
     total,
     page: params.page,
     limit: params.limit,
@@ -1209,17 +1387,7 @@ export async function getFeeById(
 
   const baseFee = serializeFee(fee);
   if (insts.length > 0) {
-    const sumPaid = insts.reduce((s, i) => s + i.paidAmount, 0);
-    const pendingAmount = clampNonNegative(fee.totalAmount - sumPaid);
-    const status = deriveFeeStatus(fee.totalAmount, sumPaid, pendingAmount, {
-      isInstallment: true,
-      endDate: fee.endDate,
-      installments: insts.map((i) => ({
-        dueDate: i.dueDate,
-        amount: i.amount,
-        paidAmount: i.paidAmount,
-      })),
-    });
+    const status = deriveFeeStatusFromInstallmentRows(fee, insts);
     return {
       fee: { ...baseFee, status },
       installments: insts.map(serializeInstallment),

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { isTenantType } from "../../types/tenant";
 import * as authService from "./auth.service";
+import * as passwordResetService from "./password-reset.service";
 import { Tenant } from "./tenant.model";
 
 /**
@@ -96,5 +97,114 @@ export async function me(req: Request, res: Response): Promise<void> {
     });
   } catch {
     res.status(500).json({ error: "Failed to load tenant" });
+  }
+}
+
+/**
+ * PATCH /auth/tenant
+ * Tenant admin: update organization display name (login slug unchanged).
+ */
+export async function patchTenant(req: Request, res: Response): Promise<void> {
+  try {
+    const tenantId = req.user!.tenantId;
+    const { name } = req.body as { name: string };
+
+    const updated = await Tenant.findByIdAndUpdate(
+      tenantId,
+      { $set: { name: name.trim() } },
+      { new: true },
+    )
+      .select("name tenantType")
+      .lean()
+      .exec();
+
+    if (!updated) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    res.json({
+      tenant: {
+        name: updated.name,
+        tenantType: updated.tenantType ?? "SCHOOL",
+      },
+    });
+  } catch {
+    res.status(500).json({ error: "Failed to update tenant" });
+  }
+}
+
+/**
+ * POST /auth/request-password-reset-otp
+ */
+export async function requestPasswordResetOtp(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const { phone, tenantSlug } = req.body as {
+      phone: string;
+      tenantSlug: string;
+    };
+    const result = await passwordResetService.requestPasswordResetOtp({
+      phone,
+      tenantSlug,
+    });
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Request failed";
+    if (message.includes("Could not send verification")) {
+      res.status(503).json({ error: message });
+      return;
+    }
+    res.status(400).json({ error: message });
+  }
+}
+
+/**
+ * POST /auth/verify-password-reset-otp
+ */
+export async function verifyPasswordResetOtp(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const { phone, tenantSlug, otp } = req.body as {
+      phone: string;
+      tenantSlug: string;
+      otp: string;
+    };
+    const result = await passwordResetService.verifyPasswordResetOtp({
+      phone,
+      tenantSlug,
+      otp,
+    });
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Verification failed";
+    const tooMany = message.includes("Too many incorrect");
+    res.status(tooMany ? 429 : 400).json({ error: message });
+  }
+}
+
+/**
+ * POST /auth/reset-password
+ */
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { phone, tenantSlug, newPassword } = req.body as {
+      phone: string;
+      tenantSlug: string;
+      newPassword: string;
+    };
+    const result = await passwordResetService.resetPasswordAfterOtp({
+      phone,
+      tenantSlug,
+      newPassword,
+    });
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Reset failed";
+    res.status(400).json({ error: message });
   }
 }

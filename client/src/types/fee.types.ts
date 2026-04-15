@@ -44,6 +44,7 @@ export interface InstallmentDto {
   dueDate: string;
   status: FeeStatus;
   lateFee: number;
+  lateFeePaid?: number;
   discount: number;
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -102,6 +103,25 @@ export interface UpdateInstallmentPayload {
   metadata?: Record<string, unknown>;
 }
 
+/** POST /fees/:feeId/installments */
+export interface AddInstallmentRowPayload {
+  amount: number;
+  dueDate: string;
+  paidAmount?: number;
+  lateFee?: number;
+  discount?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AddInstallmentsPayload {
+  installments: AddInstallmentRowPayload[];
+}
+
+export interface AddInstallmentsResult {
+  fee: FeeDto;
+  installments: InstallmentDto[];
+}
+
 export interface UpdateInstallmentResult {
   fee: FeeDto;
   installment: InstallmentDto;
@@ -140,6 +160,8 @@ export interface AssignTemplateToStudentsPayload {
   assignmentType: "STUDENTS";
   studentIds: string[];
   customInstallments?: AssignFeeCustomInstallmentPayload[];
+  /** Per-student discount percentage (0-100). */
+  perStudentDiscounts?: Record<string, number>;
 }
 
 export interface AssignTemplateToClassPayload {
@@ -148,6 +170,8 @@ export interface AssignTemplateToClassPayload {
   class: string;
   section?: string;
   customInstallments?: AssignFeeCustomInstallmentPayload[];
+  /** Optional map accepted by API; class flow usually uses manual mode for per-student values. */
+  perStudentDiscounts?: Record<string, number>;
 }
 
 export type AssignTemplateToFeesPayload =

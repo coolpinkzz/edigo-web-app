@@ -12,12 +12,13 @@ import {
 const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
   openapi: "3.0.0",
   info: {
-    title: "EduRapid API",
+    title: "Edigo API",
     version: "1.0.0",
     description: "API documentation for fee management system",
   },
   servers: [{ url: "/", description: "Current server" }],
   tags: [
+    { name: "Public", description: "Unauthenticated marketing and utilities" },
     { name: "Auth", description: "Signup, login, and session" },
     { name: "Students", description: "Student management" },
     { name: "Fees", description: "Fees and installments" },
@@ -121,7 +122,8 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           },
           course: {
             type: "object",
-            description: "Present on GET when courseId is set and course exists",
+            description:
+              "Present on GET when courseId is set and course exists",
             properties: {
               id: { type: "string" },
               name: { type: "string" },
@@ -588,6 +590,13 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           startDate: { type: "string", format: "date-time" },
           endDate: { type: "string", format: "date-time" },
           tags: { type: "array", items: { type: "string" } },
+          discount: {
+            type: "number",
+            minimum: 0,
+            maximum: 100,
+            description:
+              "Principal discount percentage (0-100) applied to template totalAmount for this assignment snapshot",
+          },
         },
       },
       FeeTemplateAssignResult: {

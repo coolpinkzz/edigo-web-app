@@ -65,6 +65,7 @@ export function studentToFormValues(s: StudentDto): CreateStudentFormValues {
     section: s.section ?? "A",
     courseId: s.courseId ?? "",
     feeTemplateId: "",
+    feeTemplateDiscountPercent: "",
     assignmentAnchorDate: "",
     feeEndDate: "",
     useCustomInstallments: false,
@@ -112,6 +113,13 @@ export function buildStudentJsonBody(
       feeAssignment = {
         templateId: tid,
       };
+      const discountRaw = trimOrUndefined(values.feeTemplateDiscountPercent ?? "");
+      if (discountRaw !== undefined) {
+        const discount = Number(discountRaw);
+        if (Number.isFinite(discount)) {
+          feeAssignment.discount = discount;
+        }
+      }
       const isInst = options.feeTemplateIsInstallment === true;
       const isLump = options.feeTemplateIsInstallment === false;
       if (isInst) {

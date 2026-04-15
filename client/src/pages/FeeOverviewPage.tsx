@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, Filter, FilterX } from "lucide-react";
+import { FeeStatusBadge } from "../components/FeeStatusBadge";
 import {
   Button,
   Card,
@@ -26,30 +27,9 @@ import { cn, formatInr, getErrorMessage } from "../utils";
 
 const PAGE_SIZE = 20;
 
-/** Solid bright pills — white text on saturated fills. */
-function statusBadgeClass(status: FeeStatus | null): string {
-  if (status == null) return "bg-muted text-muted-foreground";
-  switch (status) {
-    case "OVERDUE":
-      return "bg-red-500 text-white dark:bg-red-600";
-    case "PARTIAL":
-      return "bg-amber-300 text-amber-800 dark:bg-amber-200";
-    case "PENDING":
-      return "bg-red-500 text-white dark:bg-red-400";
-    case "PAID":
-      return "bg-emerald-500 text-white dark:bg-emerald-600";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
 function feeStatusLabel(status: FeeStatus | null): string {
   if (status == null) return "—";
   return FEE_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
-}
-
-function feeRowStatusClass(status: FeeStatus): string {
-  return statusBadgeClass(status);
 }
 
 function feeDueByLabel(f: FeeDto): string {
@@ -148,7 +128,7 @@ export function FeeOverviewPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      {/* <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">
             Fee overview
@@ -158,7 +138,7 @@ export function FeeOverviewPage() {
             filters when you need to narrow the list.
           </p>
         </div>
-      </div>
+      </div> */}
 
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -243,15 +223,11 @@ export function FeeOverviewPage() {
                         label="Class"
                         options={classOptions}
                         value={
-                          classFilter === ""
-                            ? SELECT_EMPTY_VALUE
-                            : classFilter
+                          classFilter === "" ? SELECT_EMPTY_VALUE : classFilter
                         }
                         onValueChange={(v) => {
                           setClassFilter(
-                            v === SELECT_EMPTY_VALUE
-                              ? ""
-                              : (v as StudentClass),
+                            v === SELECT_EMPTY_VALUE ? "" : (v as StudentClass),
                           );
                           setPage(1);
                         }}
@@ -458,19 +434,12 @@ export function FeeOverviewPage() {
                       <td className="px-3 py-2 align-middle tabular-nums text-muted-foreground">
                         {isSchool
                           ? `${student.class ?? "—"} · ${student.section ?? "—"}`
-                          : student.course?.name ??
-                            student.courseId ??
-                            "—"}
+                          : (student.course?.name ?? student.courseId ?? "—")}
                       </td>
                       <td className="px-3 py-2 align-middle">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
-                            statusBadgeClass(feeSummary.rollupStatus),
-                          )}
-                        >
+                        <FeeStatusBadge status={feeSummary.rollupStatus}>
                           {feeStatusLabel(feeSummary.rollupStatus)}
-                        </span>
+                        </FeeStatusBadge>
                       </td>
                       <td className="px-3 py-2 align-middle tabular-nums">
                         {formatInr(feeSummary.pendingTotal)}
@@ -546,14 +515,12 @@ export function FeeOverviewPage() {
                                             {f.feeType}
                                           </td>
                                           <td className="px-2 py-2">
-                                            <span
-                                              className={cn(
-                                                "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
-                                                feeRowStatusClass(f.status),
-                                              )}
+                                            <FeeStatusBadge
+                                              status={f.status}
+                                              variant="compact"
                                             >
                                               {feeStatusLabel(f.status)}
-                                            </span>
+                                            </FeeStatusBadge>
                                           </td>
                                           <td className="px-2 py-2 tabular-nums">
                                             {formatInr(f.totalAmount)}

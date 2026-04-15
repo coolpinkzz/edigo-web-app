@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Eye, EyeOff } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { useLogin } from "../hooks/useLogin";
 import { STORAGE_ACCESS_TOKEN } from "../constants";
 import { getErrorMessage } from "../utils";
@@ -10,7 +10,11 @@ import type { LoginRequest } from "../types";
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const loginMutation = useLogin();
+  const location = useLocation();
   const token = localStorage.getItem(STORAGE_ACCESS_TOKEN);
+  const passwordResetDone = Boolean(
+    (location.state as { passwordReset?: boolean } | null)?.passwordReset,
+  );
 
   const {
     register,
@@ -22,7 +26,7 @@ export function LoginPage() {
   });
 
   if (token) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const onSubmit = (values: LoginRequest) => {
@@ -45,6 +49,15 @@ export function LoginPage() {
             Enter your credentials to continue
           </p>
         </div>
+
+        {passwordResetDone && (
+          <div
+            className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+            role="status"
+          >
+            Your password was updated. Sign in with your new password.
+          </div>
+        )}
 
         <form
           className="space-y-5"
@@ -148,6 +161,15 @@ export function LoginPage() {
               "Sign in"
             )}
           </button>
+
+          <p className="text-center text-sm">
+            <Link
+              to="/forgot-password"
+              className="font-medium text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </p>
         </form>
       </div>
     </div>

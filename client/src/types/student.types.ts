@@ -83,6 +83,8 @@ export interface CreateStudentFormValues {
   courseId: string;
   /** Create only: optional fee template id (POST /students `feeTemplateId`). */
   feeTemplateId: string;
+  /** Create only: optional principal discount percentage (0-100) for selected fee template. */
+  feeTemplateDiscountPercent: string;
   /** Create only: YYYY-MM-DD for installment anchor (optional). */
   assignmentAnchorDate: string;
   /** Create only: optional fee due date when assigning a template (`feeOverrides.endDate`). */

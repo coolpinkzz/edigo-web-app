@@ -36,6 +36,7 @@ const DEFAULT_VALUES: CreateStudentFormValues = {
   section: "A",
   courseId: "",
   feeTemplateId: "",
+  feeTemplateDiscountPercent: "",
   assignmentAnchorDate: "",
   feeEndDate: "",
   useCustomInstallments: false,
@@ -101,16 +102,26 @@ export function StudentFormPage() {
   const onSubmit = (values: CreateStudentFormValues) => {
     clearErrors("root");
 
+    const discountRaw = String(values.feeTemplateDiscountPercent ?? "").trim();
+    const discountNum =
+      discountRaw === "" ? Number.NaN : Number(discountRaw);
+    const discountLocksCustomInstallments =
+      Number.isFinite(discountNum) && discountNum > 0;
+    const useCustomInstallmentsEffective =
+      values.useCustomInstallments && !discountLocksCustomInstallments;
+
     if (
       !isEdit &&
       isInstallmentTemplateSelected &&
-      values.useCustomInstallments
+      useCustomInstallmentsEffective
     ) {
       const rows = values.customInstallments ?? [];
       const sum = rows.reduce((acc, row) => acc + Number(row.amount || 0), 0);
       const allRowsValid = rows.every((row) => {
         const dateValue = row.dueDate?.trim();
-        const dueTs = dateValue ? ymdToBusinessMidnightMs(dateValue) : Number.NaN;
+        const dueTs = dateValue
+          ? ymdToBusinessMidnightMs(dateValue)
+          : Number.NaN;
         return Number(row.amount) > 0 && !Number.isNaN(dueTs);
       });
       if (!allRowsValid) {
@@ -132,12 +143,17 @@ export function StudentFormPage() {
       }
     }
 
+    const valuesToSave: CreateStudentFormValues = {
+      ...values,
+      useCustomInstallments: useCustomInstallmentsEffective,
+    };
+
     if (isEdit && studentId) {
-      updateMutation.mutate({ studentId, values });
+      updateMutation.mutate({ studentId, values: valuesToSave });
       return;
     }
     createMutation.mutate({
-      values,
+      values: valuesToSave,
       feeTemplateIsInstallment: selectedFeeTemplateDetails?.isInstallment,
     });
   };
@@ -163,6 +179,15 @@ export function StudentFormPage() {
   const feeTemplateIdWatch = watch("feeTemplateId");
   const useCustomInstallmentsWatch = watch("useCustomInstallments");
   const customInstallmentsWatch = watch("customInstallments");
+  const feeTemplateDiscountPercentWatch = watch("feeTemplateDiscountPercent");
+  const hasDiscountLockingCustomInstallments = useMemo(() => {
+    const t = String(feeTemplateDiscountPercentWatch ?? "").trim();
+    if (t === "") return false;
+    const n = Number(t);
+    return Number.isFinite(n) && n > 0;
+  }, [feeTemplateDiscountPercentWatch]);
+  const useCustomInstallmentsEffectiveForForm =
+    useCustomInstallmentsWatch && !hasDiscountLockingCustomInstallments;
   const hasFeeTemplateSelected = Boolean(
     feeTemplateIdWatch && String(feeTemplateIdWatch).trim() !== "",
   );
@@ -202,10 +227,12 @@ export function StudentFormPage() {
   }, [selectedFeeTemplateDetails]);
 
   const isInstallmentTemplateSelected =
-    hasFeeTemplateSelected && selectedFeeTemplateDetails?.isInstallment === true;
+    hasFeeTemplateSelected &&
+    selectedFeeTemplateDetails?.isInstallment === true;
 
   useEffect(() => {
     if (!hasFeeTemplateSelected) {
+      setValue("feeTemplateDiscountPercent", "");
       setValue("useCustomInstallments", false);
       replaceCustomInstallments([]);
       return;
@@ -226,6 +253,20 @@ export function StudentFormPage() {
     setValue,
   ]);
 
+  useEffect(() => {
+    if (!isInstallmentTemplateSelected || !hasDiscountLockingCustomInstallments) {
+      return;
+    }
+    setValue("useCustomInstallments", false);
+    replaceCustomInstallments(defaultCustomInstallmentRows);
+  }, [
+    defaultCustomInstallmentRows,
+    hasDiscountLockingCustomInstallments,
+    isInstallmentTemplateSelected,
+    replaceCustomInstallments,
+    setValue,
+  ]);
+
   const customInstallmentTotal = (customInstallmentsWatch ?? []).reduce(
     (sum, row) => sum + (Number(row?.amount) || 0),
     0,
@@ -239,13 +280,14 @@ export function StudentFormPage() {
   );
   const customInstallmentTotalMatches =
     !isInstallmentTemplateSelected ||
-    !useCustomInstallmentsWatch ||
+    !useCustomInstallmentsEffectiveForForm ||
     Math.abs(
-      customInstallmentTotal - Number(selectedFeeTemplateDetails?.totalAmount ?? 0),
+      customInstallmentTotal -
+        Number(selectedFeeTemplateDetails?.totalAmount ?? 0),
     ) < 0.005;
   const customInstallmentsValid =
     !isInstallmentTemplateSelected ||
-    !useCustomInstallmentsWatch ||
+    !useCustomInstallmentsEffectiveForForm ||
     ((customInstallmentsWatch?.length ?? 0) > 0 &&
       customInstallmentRowsValid &&
       customInstallmentTotalMatches);
@@ -480,7 +522,10 @@ export function StudentFormPage() {
                 </p>
               </div>
               {feeTemplatesQuery.isError && (
-                <p className="text-sm text-amber-800 dark:text-amber-200" role="status">
+                <p
+                  className="text-sm text-amber-800 dark:text-amber-200"
+                  role="status"
+                >
                   Could not load fee templates. Save without a template or try
                   again in a moment.
                 </p>
@@ -506,8 +551,35 @@ export function StudentFormPage() {
                   />
                 )}
               />
+              {hasFeeTemplateSelected && (
+                <Input
+                  type="number"
+                  step="1"
+                  min={0}
+                  max={100}
+                  label="Discount % (optional)"
+                  placeholder="0"
+                  {...register("feeTemplateDiscountPercent", {
+                    validate: (v) => {
+                      const t = String(v ?? "").trim();
+                      if (t === "") return true;
+                      const n = Number(t);
+                      if (!Number.isFinite(n)) {
+                        return "Discount must be a valid number";
+                      }
+                      if (n < 0 || n > 100) {
+                        return "Discount must be between 0 and 100";
+                      }
+                      return true;
+                    },
+                  })}
+                  error={errors.feeTemplateDiscountPercent?.message}
+                />
+              )}
               {feeTemplatesQuery.isLoading && (
-                <p className="text-sm text-muted-foreground">Loading templates…</p>
+                <p className="text-sm text-muted-foreground">
+                  Loading templates…
+                </p>
               )}
               {hasFeeTemplateSelected && selectedTemplateQuery.isLoading && (
                 <p className="text-sm text-muted-foreground">
@@ -522,43 +594,71 @@ export function StudentFormPage() {
                     {...register("assignmentAnchorDate")}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Due dates are computed from this anchor (IST) when you do not
-                    customize installments.
+                    Due dates are computed from this anchor (IST) when you do
+                    not customize installments.
                   </p>
 
                   <Controller
                     name="useCustomInstallments"
                     control={control}
-                    render={({ field }) => (
-                      <div className="flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2">
+                    render={({ field }) => {
+                      const switchOn =
+                        field.value && !hasDiscountLockingCustomInstallments;
+                      return (
+                      <div
+                        className={`flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2 ${
+                          hasDiscountLockingCustomInstallments
+                            ? "opacity-80"
+                            : ""
+                        }`}
+                      >
                         <div>
                           <p className="text-sm font-medium text-foreground">
                             Customize installments for this student
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Optional override for this student only; template remains unchanged.
+                            Optional override for this student only; template
+                            remains unchanged.
+                            {hasDiscountLockingCustomInstallments && (
+                              <>
+                                {" "}
+                                <span className="text-foreground">
+                                  Not available while a discount is set—clear
+                                  discount % above to customize.
+                                </span>
+                              </>
+                            )}
                           </p>
                         </div>
                         <button
                           type="button"
                           role="switch"
-                          aria-checked={field.value}
+                          aria-checked={switchOn}
+                          disabled={hasDiscountLockingCustomInstallments}
+                          aria-disabled={hasDiscountLockingCustomInstallments}
                           onClick={() => field.onChange(!field.value)}
-                          className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
-                            field.value ? "bg-primary" : "bg-muted-foreground/30"
+                          className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
+                            hasDiscountLockingCustomInstallments
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer"
+                          } ${
+                            switchOn
+                              ? "bg-primary"
+                              : "bg-muted-foreground/30"
                           }`}
                         >
                           <span
                             className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-card shadow transition duration-200 ${
-                              field.value ? "translate-x-5" : "translate-x-0.5"
+                              switchOn ? "translate-x-5" : "translate-x-0.5"
                             }`}
                           />
                         </button>
                       </div>
-                    )}
+                      );
+                    }}
                   />
 
-                  {useCustomInstallmentsWatch && (
+                  {useCustomInstallmentsEffectiveForForm && (
                     <div className="space-y-3 rounded-lg border border-border bg-card p-3">
                       {customInstallmentFields.map((field, index) => (
                         <div
@@ -617,16 +717,16 @@ export function StudentFormPage() {
                           </strong>
                           {" · "}Target:{" "}
                           <strong className="text-foreground">
-                            {Number(selectedFeeTemplateDetails?.totalAmount ?? 0).toFixed(
-                              2,
-                            )}
+                            {Number(
+                              selectedFeeTemplateDetails?.totalAmount ?? 0,
+                            ).toFixed(2)}
                           </strong>
                         </p>
                       </div>
                       {!customInstallmentsValid && (
                         <p className="text-xs text-amber-700">
-                          Ensure each row has a positive amount, valid date, and the
-                          total matches the template amount.
+                          Ensure each row has a positive amount, valid date, and
+                          the total matches the template amount.
                         </p>
                       )}
                     </div>

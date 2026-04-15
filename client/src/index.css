@@ -1,10 +1,17 @@
 @import "tailwindcss";
 
 /**
+ * Class-based dark mode (Tailwind v4). Equivalent to `darkMode: "class"` in Tailwind v3 config.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/**
  * Teal system: trust, readability, premium (primary / hover / surfaces / text).
  */
 @theme {
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  /** Logo / product wordmark — distinct from UI body (Manrope). */
+  --font-brand: "Sora", "Manrope", ui-sans-serif, system-ui, sans-serif;
   --color-background: #ffffff;
   --color-foreground: #0b1320;
   --color-card: #ffffff;
@@ -48,9 +55,19 @@ body,
   height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+  transition:
+    color 0.3s ease,
+    background-color 0.3s ease;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
   background-color: var(--color-background);
   color: var(--color-foreground);
+  transition:
+    color 0.3s ease,
+    background-color 0.3s ease;
 }

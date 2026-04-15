@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { ConfirmationModal } from "../components/ConfirmationModal";
 import { Button, Card, CardDescription, CardTitle } from "../components/ui";
 import { useDeleteFeeTemplate } from "../hooks/useDeleteFeeTemplate";
 import { useFeeTemplates } from "../hooks/useFeeTemplates";
@@ -11,6 +12,10 @@ import { getErrorMessage } from "../utils";
 export function TemplatesListPage() {
   const { data, isLoading, isError, error } = useFeeTemplates({ limit: 50 });
   const deleteMutation = useDeleteFeeTemplate();
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const showCreated = searchParams.get("created") === "1";
   const showUpdated = searchParams.get("updated") === "1";
@@ -23,19 +28,33 @@ export function TemplatesListPage() {
     return () => window.clearTimeout(id);
   }, [showCreated, showUpdated, setSearchParams]);
 
-  const handleDelete = (id: string, title: string) => {
-    if (
-      !window.confirm(
-        `Delete fee structure “${title}”? You can only delete structures that have not been used to create fees.`,
-      )
-    ) {
-      return;
-    }
-    deleteMutation.mutate(id);
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => setDeleteTarget(null),
+    });
   };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      <ConfirmationModal
+        open={deleteTarget != null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete fee structure?"
+        description={
+          deleteTarget ? (
+            <>
+              Delete fee structure “<strong>{deleteTarget.title}</strong>”? You
+              can only delete structures that have not been used to create fees.
+            </>
+          ) : null
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        isConfirming={deleteMutation.isPending}
+        onConfirm={confirmDelete}
+      />
       {showCreated && (
         <div
           className="rounded-lg bg-accent px-4 py-3 text-sm text-accent-foreground shadow-md shadow-primary/10 transition-opacity duration-300"
@@ -68,11 +87,6 @@ export function TemplatesListPage() {
       </div>
 
       <Card className="p-0! overflow-hidden">
-        <div className="border-b border-border px-6 py-4">
-          <CardTitle className="text-lg">All fee structures</CardTitle>
-          <CardDescription>Reusable fee definitions for your organization.</CardDescription>
-        </div>
-
         {isLoading && (
           <p className="px-6 py-8 text-sm text-muted-foreground">Loading…</p>
         )}
@@ -125,7 +139,9 @@ export function TemplatesListPage() {
                     <td className="px-6 py-3 font-medium text-foreground">
                       {t.title}
                     </td>
-                    <td className="px-6 py-3 text-muted-foreground">{t.feeType}</td>
+                    <td className="px-6 py-3 text-muted-foreground">
+                      {t.feeType}
+                    </td>
                     <td className="px-6 py-3 text-right tabular-nums text-foreground">
                       {t.totalAmount.toLocaleString(undefined, {
                         minimumFractionDigits: 2,
@@ -149,7 +165,9 @@ export function TemplatesListPage() {
                           type="button"
                           className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
                           disabled={deleteMutation.isPending}
-                          onClick={() => handleDelete(t.id, t.title)}
+                          onClick={() =>
+                            setDeleteTarget({ id: t.id, title: t.title })
+                          }
                         >
                           Delete
                         </button>

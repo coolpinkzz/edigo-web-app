@@ -16,6 +16,8 @@ import {
 } from "../../config/timezone";
 
 const SCOPE = "reminder.service";
+const DAILY_PENALTY_GRACE_DAYS = 0;
+const DAILY_PENALTY_CAP_RATIO = 0.25;
 
 /**
  * Synthetic `ReminderToken.installmentId` / `ReminderLog.installmentId` for lump-sum fees
@@ -81,11 +83,47 @@ async function upsertReminderToken(input: {
   return { token };
 }
 
-function pendingInstallmentRupee(inst: {
-  amount: number;
-  paidAmount: number;
-}): number {
-  return Math.max(0, inst.amount - inst.paidAmount);
+function computeInstallmentReminderCollectRupees(
+  fee: { totalAmount: number; paidAmount: number },
+  inst: {
+    amount: number;
+    paidAmount: number;
+    dueDate: Date;
+    lateFee?: number;
+    lateFeePaid?: number;
+  },
+  now: Date,
+): {
+  principalCollectRupees: number;
+  penaltyCollectRupees: number;
+  totalCollectRupees: number;
+} {
+  const principalPending = Math.max(0, inst.amount - inst.paidAmount);
+  const feeRemaining = Math.max(0, fee.totalAmount - fee.paidAmount);
+  const principalCollectRupees = Math.min(principalPending, feeRemaining);
+
+  const todayStart = startOfBusinessDay(now);
+  const dueStart = startOfBusinessDay(inst.dueDate);
+  const rawDaysOverdue = Math.max(
+    0,
+    Math.floor((todayStart.getTime() - dueStart.getTime()) / DAY_MS),
+  );
+  const overdueDays = Math.max(0, rawDaysOverdue - DAILY_PENALTY_GRACE_DAYS);
+  const dailyPenaltyRupees = Math.max(0, inst.lateFee ?? 0);
+  const accruedPenaltyRupees = overdueDays * dailyPenaltyRupees;
+  const penaltyCapRupees = Math.max(0, inst.amount * DAILY_PENALTY_CAP_RATIO);
+  const cappedPenaltyRupees = Math.min(accruedPenaltyRupees, penaltyCapRupees);
+  const penaltyPaidRupees = Math.max(0, inst.lateFeePaid ?? 0);
+  const penaltyCollectRupees = Math.max(
+    0,
+    cappedPenaltyRupees - penaltyPaidRupees,
+  );
+
+  return {
+    principalCollectRupees,
+    penaltyCollectRupees,
+    totalCollectRupees: principalCollectRupees + penaltyCollectRupees,
+  };
 }
 
 export type ReminderRunSummary = {
@@ -135,7 +173,6 @@ export async function runInstallmentReminders(
 
   const baseQuery: Record<string, unknown> = {
     dueDate: { $lte: dueBefore },
-    $expr: { $lt: ["$paidAmount", "$amount"] },
   };
 
   if (options?.tenantId) {
@@ -177,12 +214,6 @@ export async function runInstallmentReminders(
 
   for (const inst of candidates) {
     try {
-      const pending = pendingInstallmentRupee(inst);
-      if (pending <= 0) {
-        summary.skippedPaid += 1;
-        continue;
-      }
-
       if (!mongoose.isValidObjectId(inst.feeId)) {
         summary.errors += 1;
         continue;
@@ -206,8 +237,12 @@ export async function runInstallmentReminders(
         continue;
       }
 
-      const instRemaining = Math.min(pending, feeRemaining);
-      if (instRemaining <= 0) {
+      const { totalCollectRupees } = computeInstallmentReminderCollectRupees(
+        fee,
+        inst,
+        now,
+      );
+      if (totalCollectRupees <= 0) {
         summary.skippedPaid += 1;
         continue;
       }
@@ -245,7 +280,7 @@ export async function runInstallmentReminders(
 
       const payUrl = `${env.publicAppUrl}/pay/${token}`;
       const dueStr = businessDayKey(new Date(inst.dueDate));
-      const message = `Fee reminder: ${fee.title} for ${student.studentName}. Due ${dueStr}. Pending approx ₹${instRemaining.toFixed(2)}. Pay: ${payUrl}`;
+      const message = `Fee reminder: ${fee.title} for ${student.studentName}. Due ${dueStr}. Pending approx ₹${totalCollectRupees.toFixed(2)}. Pay: ${payUrl}`;
 
       const sms = await sendSms(phone, message);
       if (!sms.ok) {
@@ -457,15 +492,6 @@ export async function sendInstallmentReminderForTenant(
     return { ok: false, status: 404, message: "Installment not found" };
   }
 
-  const pending = pendingInstallmentRupee(inst);
-  if (pending <= 0) {
-    return {
-      ok: false,
-      status: 400,
-      message: "Installment has no pending balance",
-    };
-  }
-
   const fee = await Fee.findById(inst.feeId).exec();
   if (!fee) {
     return { ok: false, status: 404, message: "Installment not found" };
@@ -496,8 +522,12 @@ export async function sendInstallmentReminderForTenant(
     return { ok: false, status: 400, message: "Fee is fully paid" };
   }
 
-  const instRemaining = Math.min(pending, feeRemaining);
-  if (instRemaining <= 0) {
+  const { totalCollectRupees } = computeInstallmentReminderCollectRupees(
+    fee,
+    inst,
+    now,
+  );
+  if (totalCollectRupees <= 0) {
     return { ok: false, status: 400, message: "Nothing to collect on this installment" };
   }
 
@@ -541,7 +571,7 @@ export async function sendInstallmentReminderForTenant(
 
   const payUrl = `${env.publicAppUrl}/pay/${token}`;
   const dueStr = businessDayKey(new Date(inst.dueDate));
-  const message = `Fee reminder: ${fee.title} for ${student.studentName}. Due ${dueStr}. Pending approx ₹${instRemaining.toFixed(2)}. Pay: ${payUrl}`;
+  const message = `Fee reminder: ${fee.title} for ${student.studentName}. Due ${dueStr}. Pending approx ₹${totalCollectRupees.toFixed(2)}. Pay: ${payUrl}`;
 
   const sms = await sendSms(phone, message);
   if (!sms.ok) {

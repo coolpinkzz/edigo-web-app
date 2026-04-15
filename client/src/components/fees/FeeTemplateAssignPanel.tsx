@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Button,
@@ -6,7 +6,6 @@ import {
   CardDescription,
   CardTitle,
   ConfirmationModal,
-  Input,
   SELECT_EMPTY_VALUE,
   SelectField,
 } from "../ui";
@@ -26,8 +25,6 @@ import type {
   StudentSection,
 } from "../../types";
 import { cn, getErrorMessage } from "../../utils";
-import { addDaysToISODate, todayISODate } from "../../utils/installments";
-import { ymdToBusinessMidnightMs } from "../../utils/timezone";
 
 const MAX_MANUAL_SELECTION = 500;
 const STUDENT_PAGE_SIZE = 20;
@@ -53,12 +50,6 @@ export interface FeeTemplateAssignSummary {
   title: string;
   feeType: FeeType;
   totalAmount: number;
-  isInstallment: boolean;
-  installmentAnchorDate?: string;
-  defaultInstallments: Array<{
-    amount: number;
-    dueInDays: number;
-  }>;
 }
 
 export interface FeeTemplateAssignPanelProps {
@@ -95,10 +86,6 @@ export function FeeTemplateAssignPanel({
   const [studentPage, setStudentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [success, setSuccess] = useState<AssignTemplateToFeesResult | null>(null);
-  const [customizeInstallments, setCustomizeInstallments] = useState(false);
-  const [customInstallments, setCustomInstallments] = useState<
-    Array<{ amount: number; dueDate: string }>
-  >([]);
   const [alertModal, setAlertModal] = useState<{
     open: boolean;
     title: string;
@@ -153,79 +140,12 @@ export function FeeTemplateAssignPanel({
   );
 
   const classTotal = previewQuery.data?.total;
-  const defaultInstallmentRows = useMemo(
-    () =>
-      templateSummary.defaultInstallments
-        .slice()
-        .sort((a, b) => a.dueInDays - b.dueInDays)
-        .map((row) => ({
-          amount: Number(row.amount),
-          dueDate: addDaysToISODate(
-            templateSummary.installmentAnchorDate || todayISODate(),
-            row.dueInDays,
-          ),
-        })),
-    [templateSummary.defaultInstallments, templateSummary.installmentAnchorDate],
-  );
-
-  useEffect(() => {
-    setCustomInstallments(defaultInstallmentRows);
-  }, [templateId, defaultInstallmentRows]);
-
-  const updateCustomInstallmentRow = (
-    index: number,
-    patch: Partial<{ amount: number; dueDate: string }>,
-  ) => {
-    setCustomInstallments((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
-    );
-  };
-
-  const removeCustomInstallmentRow = (index: number) => {
-    setCustomInstallments((prev) =>
-      prev.filter((_, rowIndex) => rowIndex !== index),
-    );
-  };
-
-  const addCustomInstallmentRow = () => {
-    setCustomInstallments((prev) => [
-      ...prev,
-      {
-        amount: 0,
-        dueDate:
-          prev.at(-1)?.dueDate ??
-          templateSummary.installmentAnchorDate ??
-          todayISODate(),
-      },
-    ]);
-  };
-
-  const customInstallmentTotal = customInstallments.reduce(
-    (sum, row) => sum + (Number(row.amount) || 0),
-    0,
-  );
-  const customInstallmentRowsValid = customInstallments.every((row) => {
-    const dueTime = ymdToBusinessMidnightMs(row.dueDate);
-    return Number(row.amount) > 0 && !Number.isNaN(dueTime);
-  });
-  const customInstallmentsValid =
-    customInstallments.length > 0 &&
-    customInstallmentRowsValid &&
-    Math.abs(customInstallmentTotal - templateSummary.totalAmount) < 0.005;
-  const customInstallmentsDirty =
-    customInstallments.length !== defaultInstallmentRows.length ||
-    customInstallments.some((row, index) => {
-      const base = defaultInstallmentRows[index];
-      if (!base) return true;
-      return (
-        Math.abs(Number(row.amount) - Number(base.amount)) >= 0.005 ||
-        row.dueDate !== base.dueDate
-      );
-    });
 
   const toggleStudent = (id: string) => {
     setSelectedIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.includes(id)) {
+        return prev.filter((x) => x !== id);
+      }
       if (prev.length >= MAX_MANUAL_SELECTION) return prev;
       return [...prev, id];
     });
@@ -243,7 +163,9 @@ export function FeeTemplateAssignPanel({
     });
   };
 
-  const clearSelection = () => setSelectedIds([]);
+  const clearSelection = () => {
+    setSelectedIds([]);
+  };
 
   const openAlertModal = (description: string, title = "Cannot continue") => {
     setAlertModal({
@@ -277,26 +199,6 @@ export function FeeTemplateAssignPanel({
 
   const handleSubmit = async () => {
     const { title } = templateSummary;
-    const shouldSendCustomInstallments =
-      templateSummary.isInstallment &&
-      customizeInstallments &&
-      customInstallmentsDirty;
-    if (
-      shouldSendCustomInstallments &&
-      !customInstallmentsValid
-    ) {
-      openAlertModal(
-        "Installment customization is invalid. Ensure each row has a positive amount, a valid date, and totals match the fee amount.",
-      );
-      return;
-    }
-
-    const customInstallmentsPayload = shouldSendCustomInstallments
-      ? customInstallments.map((row) => ({
-          amount: Number(row.amount),
-          dueDate: row.dueDate,
-        }))
-      : undefined;
 
     if (mode === "class") {
       const sectionLabel =
@@ -314,9 +216,6 @@ export function FeeTemplateAssignPanel({
         templateId,
         assignmentType: "CLASS",
         class: assignClass,
-        ...(customInstallmentsPayload
-          ? { customInstallments: customInstallmentsPayload }
-          : {}),
       };
       if (assignSection && assignSection !== SECTION_ANY) {
         body.section = assignSection as StudentSection;
@@ -345,9 +244,6 @@ export function FeeTemplateAssignPanel({
       templateId,
       assignmentType: "STUDENTS",
       studentIds: selectedIds,
-      ...(customInstallmentsPayload
-        ? { customInstallments: customInstallmentsPayload }
-        : {}),
     };
     try {
       const result = await assignMutation.mutateAsync({ body });
@@ -361,8 +257,6 @@ export function FeeTemplateAssignPanel({
     setSuccess(null);
     setSelectedIds([]);
     setStudentPage(1);
-    setCustomizeInstallments(false);
-    setCustomInstallments(defaultInstallmentRows);
   };
 
   const canSubmitClass = isSchool && mode === "class";
@@ -372,7 +266,6 @@ export function FeeTemplateAssignPanel({
     selectedIds.length <= MAX_MANUAL_SELECTION;
   const canSubmit =
     (canSubmitClass || canSubmitManual) &&
-    (!customizeInstallments || customInstallmentsValid) &&
     !assignMutation.isPending &&
     !success;
 
@@ -596,7 +489,6 @@ export function FeeTemplateAssignPanel({
                 </Button>
               </div>
             </div>
-
             {listQuery.isLoading && (
               <p className="text-sm text-muted-foreground">Loading students…</p>
             )}
@@ -617,7 +509,7 @@ export function FeeTemplateAssignPanel({
               listQuery.data &&
               listQuery.data.data.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-card-border bg-card shadow-md shadow-black/[0.06]">
-                  <table className="w-full min-w-[28rem] text-left text-sm">
+                  <table className="w-full min-w-[24rem] text-left text-sm">
                     <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
                       <tr>
                         <th className="w-10 px-3 py-2" />
@@ -693,116 +585,6 @@ export function FeeTemplateAssignPanel({
                   </Button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {templateSummary.isInstallment && (
-          <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  Customize installments for assigned students
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Default template installments are prefilled below. Turn on customization to edit them.
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={customizeInstallments}
-                onClick={() => {
-                  setCustomizeInstallments((prev) => {
-                    const next = !prev;
-                    if (next) setCustomInstallments(defaultInstallmentRows);
-                    return next;
-                  });
-                }}
-                className={cn(
-                  "relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200",
-                  customizeInstallments ? "bg-primary" : "bg-muted-foreground/30",
-                )}
-              >
-                <span
-                  className={cn(
-                    "pointer-events-none inline-block h-6 w-6 transform rounded-full bg-card shadow transition duration-200",
-                    customizeInstallments ? "translate-x-5" : "translate-x-0.5",
-                  )}
-                />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {customInstallments.map((row, index) => (
-                <div
-                  key={`${index}-${row.dueDate}`}
-                  className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-start"
-                >
-                  <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Input
-                      label={`Amount ${index + 1}`}
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      value={Number.isFinite(row.amount) ? row.amount : 0}
-                      onChange={(e) =>
-                        updateCustomInstallmentRow(index, {
-                          amount: Number(e.target.value),
-                        })
-                      }
-                      disabled={!customizeInstallments}
-                    />
-                    <Input
-                      label="Due date"
-                      type="date"
-                      value={row.dueDate}
-                      onChange={(e) =>
-                        updateCustomInstallmentRow(index, {
-                          dueDate: e.target.value,
-                        })
-                      }
-                      disabled={!customizeInstallments}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="shrink-0 text-red-600 hover:bg-red-50"
-                    onClick={() => removeCustomInstallmentRow(index)}
-                    disabled={!customizeInstallments || customInstallments.length <= 1}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={addCustomInstallmentRow}
-                disabled={!customizeInstallments}
-              >
-                + Add installment
-              </Button>
-              <p className="text-sm text-muted-foreground">
-                Total:{" "}
-                <strong className="text-foreground">
-                  {customInstallmentTotal.toFixed(2)}
-                </strong>
-                {" · "}Target:{" "}
-                <strong className="text-foreground">
-                  {templateSummary.totalAmount.toFixed(2)}
-                </strong>
-              </p>
-            </div>
-
-            {customizeInstallments && !customInstallmentsValid && (
-              <p className="text-sm text-amber-700" role="status">
-                Fix installment rows so amounts are positive, dates are valid, and total matches the fee amount.
-              </p>
             )}
           </div>
         )}

@@ -2,15 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- <link rel="icon" type="image/svg+xml" href="/favicon.png" /> -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
+    <!-- <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" /> -->
+    <link rel="manifest" href="/site.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Sora:wght@600;700&display=swap"
       rel="stylesheet"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EduRapid</title>
+    <meta
+      name="description"
+      content="Manage fees, attendance, and students with Edigo. Automate installment tracking, monitor attendance, and run your institute efficiently."
+    />
+    <title>
+      Edigo - Institute Management Software for Fees, Attendance &amp; Students
+    </title>
+    <script>
+      (function () {
+        try {
+          var k = "edigo-theme";
+          var v = localStorage.getItem(k);
+          if (v !== "light" && v !== "dark" && v !== "auto") v = "auto";
+          var dark = false;
+          if (v === "dark") dark = true;
+          else if (v === "light") dark = false;
+          else {
+            var h = new Date().getHours();
+            dark = !(h >= 7 && h < 19);
+          }
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

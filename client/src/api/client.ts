@@ -4,6 +4,7 @@ import { env, STORAGE_ACCESS_TOKEN } from '../constants'
 /**
  * Shared Axios instance: base URL + auth header from localStorage.
  * Auth APIs use phone + password; JWT includes a `phone` claim.
+ * Tenant slug for `/auth/*` bodies is resolved in `getTenantSlug()` (subdomain in production), not here.
  */
 export const apiClient = axios.create({
   baseURL: env.apiBaseUrl,

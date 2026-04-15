@@ -77,6 +77,7 @@ const feeAssignmentOverridesSchema = Joi.object({
   startDate: Joi.date().optional(),
   endDate: Joi.date().optional(),
   tags: Joi.array().items(Joi.string().trim()).optional(),
+  discount: Joi.number().min(0).max(100).optional(),
 });
 
 const classField = Joi.string()
@@ -197,4 +198,6 @@ export interface FeeAssignmentOverridesBody {
   startDate?: Date;
   endDate?: Date;
   tags?: string[];
+  /** Percentage discount on principal totalAmount (0-100). */
+  discount?: number;
 }

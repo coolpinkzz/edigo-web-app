@@ -13,7 +13,7 @@ type AdminOnlyRouteProps = {
 export function AdminOnlyRoute({ children }: AdminOnlyRouteProps) {
   const role = getRoleFromStorage();
   if (!hasTenantAdminAccess(role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }

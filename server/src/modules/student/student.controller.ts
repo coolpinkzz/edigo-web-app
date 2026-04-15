@@ -95,6 +95,7 @@ export async function create(req: Request, res: Response): Promise<void> {
       leftAt: student.leftAt,
       tags: student.tags,
       feeTemplateId: feeAssignment?.templateId ?? body.feeTemplateId,
+      feeTemplateDiscountPercent: feeAssignment?.discount,
       assignmentAnchorDate:
         feeAssignment?.assignmentAnchorDate ?? body.assignmentAnchorDate,
       feeOverrides: feeAssignment?.feeOverrides ?? body.feeOverrides,

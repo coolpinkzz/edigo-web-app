@@ -39,6 +39,8 @@ export interface CreateStudentInput {
   /** When set, a fee is created from this template after the student row is inserted. */
   feeTemplateId?: string;
   assignmentAnchorDate?: Date;
+  /** Optional principal discount percentage (0-100) when assigning a fee template. */
+  feeTemplateDiscountPercent?: number;
   feeOverrides?: FeeTemplateCreateOverrides;
   useCustomInstallments?: boolean;
   customInstallments?: CustomAssignmentInstallmentRow[];
@@ -287,6 +289,7 @@ async function assignFeeFromTemplateInTransaction(
     merged,
     session,
     customInstallments,
+    input.feeTemplateDiscountPercent,
   );
 }
 

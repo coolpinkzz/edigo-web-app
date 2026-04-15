@@ -55,3 +55,38 @@ export const payLinkRateLimit = rateLimit({
   max: 60,
   handler: rateLimitHandler("Too many payment link requests. Please try again later."),
 });
+
+/** Forgot password: OTP SMS abuse. */
+export const passwordResetOtpRequestRateLimit = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  handler: rateLimitHandler(
+    "Too many verification code requests. Please try again later.",
+  ),
+});
+
+/** OTP guess throttling (per IP). */
+export const passwordResetOtpVerifyRateLimit = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  handler: rateLimitHandler("Too many verification attempts. Please try again later."),
+});
+
+export const passwordResetSubmitRateLimit = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  handler: rateLimitHandler("Too many reset attempts. Please try again later."),
+});
+
+/** Public landing "book demo" form — limit abuse / spam. */
+export const demoRequestRateLimit = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  handler: rateLimitHandler(
+    "Too many demo requests from this address. Please try again later.",
+  ),
+});

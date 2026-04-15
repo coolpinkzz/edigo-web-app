@@ -49,14 +49,14 @@ function formatDate(iso: string): string {
 }
 
 function rowToneClass(days: number): string {
-  if (days <= 7) return "bg-amber-50/90 hover:bg-amber-50";
-  if (days <= 30) return "bg-orange-50/90 hover:bg-orange-50";
+  if (days <= 7) return "bg-amber-50 hover:bg-amber-100";
+  if (days <= 30) return "bg-red-100 hover:bg-red-200";
   return "bg-red-50/90 hover:bg-red-50";
 }
 
 function daysBadgeClass(days: number): string {
   if (days <= 7) return "bg-amber-200 text-amber-950";
-  if (days <= 30) return "bg-orange-200 text-orange-950";
+  if (days <= 30) return "bg-red-300 text-red-950";
   return "bg-red-200 text-red-950";
 }
 
@@ -93,7 +93,7 @@ export function OverduePage() {
   });
 
   const reminderMutation = useSendOverdueReminder();
-  const runReminders = useRunReminders();
+  // const runReminders = useRunReminders();
 
   const totalPages = data?.totalPages ?? 0;
   const canPrev = page > 1;
@@ -153,7 +153,7 @@ export function OverduePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">
             Overdue fees
@@ -163,7 +163,7 @@ export function OverduePage() {
             — prioritize follow-up and collection.
           </p>
         </div>
-      </div>
+      </div> */}
 
       <div
         className={cn(
@@ -173,7 +173,7 @@ export function OverduePage() {
             : "grid-cols-1",
         )}
       >
-        {data && (
+        {/* {data && (
           <>
             <div className="rounded-xl border border-white/20 bg-primary-gradient p-4 text-primary-foreground shadow-lg shadow-black/20">
               <p className="text-xs font-medium uppercase tracking-wide text-primary-foreground/80">
@@ -192,9 +192,9 @@ export function OverduePage() {
               </p>
             </div>
           </>
-        )}
+        )} */}
 
-        <div className="rounded-xl border border-card-border bg-card p-6 shadow-md shadow-black/6">
+        {/* <div className="rounded-xl border border-card-border bg-card p-6 shadow-md shadow-black/6">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">
               Fee reminders
@@ -283,7 +283,7 @@ export function OverduePage() {
               </dl>
             </div>
           ) : null}
-        </div>
+        </div> */}
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
@@ -306,9 +306,7 @@ export function OverduePage() {
               label="Course"
               name="filter-course"
               options={courseOptions}
-              value={
-                courseFilter === "" ? SELECT_EMPTY_VALUE : courseFilter
-              }
+              value={courseFilter === "" ? SELECT_EMPTY_VALUE : courseFilter}
               onValueChange={(v) => {
                 setPage(1);
                 setCourseFilter(v === SELECT_EMPTY_VALUE ? "" : v);
@@ -343,7 +341,7 @@ export function OverduePage() {
       </div>
 
       <Card className="overflow-hidden p-0!">
-        <div className="border-b border-border px-6 py-4">
+        {/* <div className="border-b border-border px-6 py-4">
           <CardTitle className="text-lg">Overdue fees</CardTitle>
           <CardDescription>
             {data != null && (
@@ -358,7 +356,7 @@ export function OverduePage() {
             Row color: amber (1–7 days), orange (8–30), red (31+). Per-row and
             bulk reminders use the same daily dedupe rules.
           </p>
-        </div>
+        </div> */}
 
         {isLoading && (
           <p className="px-6 py-8 text-sm text-muted-foreground">Loading…</p>

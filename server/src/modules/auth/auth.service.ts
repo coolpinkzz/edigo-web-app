@@ -193,10 +193,8 @@ export async function inviteUser(
   const tenantDoc = await Tenant.findById(input.tenantId).select("name").lean();
   const orgName =
     typeof tenantDoc?.name === "string" ? tenantDoc.name : "your organization";
-  const loginHint = env.clientAppUrl
-    ? ` ${env.clientAppUrl}/login`
-    : "";
-  const smsBody = `EduRapid: Your account for ${orgName} is ready.${loginHint} Sign in with your phone number. Temporary password: ${tempPassword}`;
+  const loginHint = env.clientAppUrl ? ` ${env.clientAppUrl}/login` : "";
+  const smsBody = `Edigo: Your account for ${orgName} is ready.${loginHint} Sign in with your phone number. Temporary password: ${tempPassword}`;
 
   const smsResult = await sendSms(user.phone, smsBody);
   if (!smsResult.ok) {

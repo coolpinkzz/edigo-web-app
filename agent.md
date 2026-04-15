@@ -2,7 +2,7 @@
 
 ## 🎯 Goal
 
-Build an **AI-powered EduRapid System (CoFee alternative)** step-by-step using Cursor.
+Build an **AI-powered Edigo System (CoFee alternative)** step-by-step using Cursor.
 
 ---
 

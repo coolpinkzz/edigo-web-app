@@ -6,7 +6,11 @@ import {
   FEE_TYPES,
   IFee,
 } from "../fee/fee.model";
-import { serializeFee } from "../fee/fee.service";
+import { IInstallment, Installment } from "../fee/installment.model";
+import {
+  deriveFeeStatusFromInstallmentRows,
+  serializeFee,
+} from "../fee/fee.service";
 import { IStudent, Student } from "./student.model";
 import { StudentClass, StudentSection, StudentStatus } from "./student.model";
 import {
@@ -108,8 +112,13 @@ function feeFilterExpression(
   return { $and: parts };
 }
 
-function leanFeeToSerialized(f: IFee | Record<string, unknown>) {
-  return serializeFee(f as IFee);
+function feeDocDerivedStatus(
+  feeDoc: IFee,
+  instByFeeId: Map<string, IInstallment[]>,
+): FeeStatus {
+  const insts = instByFeeId.get(feeDoc._id.toString()) ?? [];
+  if (!feeDoc.isInstallment || insts.length === 0) return feeDoc.status;
+  return deriveFeeStatusFromInstallmentRows(feeDoc, insts);
 }
 
 /**
@@ -239,12 +248,39 @@ export async function listStudentFeeOverview(
     }
   >;
 
+  const allFeeDocs = rawRows.flatMap((d) => d.fees ?? []);
+  const installmentFeeIds = allFeeDocs
+    .filter((f) => f.isInstallment)
+    .map((f) => f._id.toString());
+
+  const instByFeeId = new Map<string, IInstallment[]>();
+  if (installmentFeeIds.length > 0) {
+    const allInsts = await Installment.find({
+      feeId: { $in: installmentFeeIds },
+    })
+      .sort({ dueDate: 1 })
+      .exec();
+    for (const inst of allInsts) {
+      const fid = inst.feeId;
+      const arr = instByFeeId.get(fid) ?? [];
+      arr.push(inst);
+      instByFeeId.set(fid, arr);
+    }
+  }
+
   const tenantType = await getTenantType(tenantId);
 
   const data: StudentFeeOverviewRow[] = rawRows.map((doc) => {
-    const fees = (doc.fees ?? []).map(leanFeeToSerialized);
     const feeDocs = doc.fees ?? [];
-    const rollupStatus = rollupFeeStatus(feeDocs);
+    const fees = feeDocs.map((fd) => {
+      const base = serializeFee(fd);
+      const status = feeDocDerivedStatus(fd, instByFeeId);
+      return status === fd.status ? base : { ...base, status };
+    });
+    const statusSlices = feeDocs.map((fd) => ({
+      status: feeDocDerivedStatus(fd, instByFeeId),
+    }));
+    const rollupStatus = rollupFeeStatus(statusSlices);
     return {
       student: applyTenantResponseShape(
         tenantType,
@@ -257,7 +293,7 @@ export async function listStudentFeeOverview(
         paidTotal: doc.paidTotal ?? 0,
         totalDue: doc.totalDue ?? 0,
         rollupStatus,
-        countsByStatus: countsByStatus(feeDocs),
+        countsByStatus: countsByStatus(statusSlices),
       },
     };
   });

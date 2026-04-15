@@ -208,6 +208,9 @@ const assignTemplateBodySchema = Joi.object({
     .items(assignCustomInstallmentSchema)
     .min(1)
     .optional(),
+  perStudentDiscounts: Joi.object()
+    .pattern(/^[a-fA-F0-9]{24}$/, Joi.number().min(0).max(100))
+    .optional(),
 }).unknown(false);
 
 const feeIdParamsSchema = Joi.object({
@@ -333,6 +336,8 @@ export interface AssignTemplateToStudentsBody {
     amount: number;
     dueDate: Date;
   }[];
+  /** Percentage discount on principal totalAmount (0-100). */
+  perStudentDiscounts?: Record<string, number>;
 }
 
 export interface AddInstallmentsBody {

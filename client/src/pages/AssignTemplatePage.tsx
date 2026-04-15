@@ -76,9 +76,6 @@ export function AssignTemplatePage() {
           title: template.title,
           feeType: template.feeType,
           totalAmount: template.totalAmount,
-          isInstallment: template.isInstallment,
-          installmentAnchorDate: template.installmentAnchorDate,
-          defaultInstallments: template.defaultInstallments,
         }}
       />
     </div>

@@ -28,3 +28,8 @@ export interface LoginResponse {
     tenantType: TenantType;
   };
 }
+
+/** Generic `{ message }` from forgot-password OTP and reset endpoints. */
+export interface PasswordResetMessageResponse {
+  message: string;
+}

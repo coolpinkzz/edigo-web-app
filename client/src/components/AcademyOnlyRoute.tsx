@@ -20,7 +20,7 @@ export function AcademyOnlyRoute({ children }: AcademyOnlyRouteProps) {
   }
   const tenantType = sessionQuery.data?.tenant?.tenantType ?? "SCHOOL";
   if (tenantType === "SCHOOL") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }

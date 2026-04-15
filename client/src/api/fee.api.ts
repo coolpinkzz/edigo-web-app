@@ -1,4 +1,6 @@
 import type {
+  AddInstallmentsPayload,
+  AddInstallmentsResult,
   AssignTemplateToFeesPayload,
   AssignTemplateToFeesResult,
   FeeDto,
@@ -76,6 +78,7 @@ export function buildInstallmentPaymentPayload(
     paidAmount: number;
     paymentMethod: ManualPaymentMethod;
     paymentReference: string;
+    lateFee?: number;
   },
 ): UpdateInstallmentPayload {
   const base =
@@ -86,6 +89,7 @@ export function buildInstallmentPaymentPayload(
       : {};
   return {
     paidAmount: input.paidAmount,
+    ...(input.lateFee !== undefined ? { lateFee: input.lateFee } : {}),
     metadata: {
       ...base,
       paymentMethod: input.paymentMethod,
@@ -93,6 +97,18 @@ export function buildInstallmentPaymentPayload(
       lastPaymentRecordedAt: new Date().toISOString(),
     },
   };
+}
+
+/** POST /fees/:feeId/installments */
+export async function addInstallmentsToFee(
+  feeId: string,
+  body: AddInstallmentsPayload,
+): Promise<AddInstallmentsResult> {
+  const { data } = await apiClient.post<AddInstallmentsResult>(
+    `/fees/${feeId}/installments`,
+    body,
+  );
+  return data;
 }
 
 /** Merge manual payment info into fee metadata for lump-sum fees. */

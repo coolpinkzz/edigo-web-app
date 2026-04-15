@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { ConfirmationModal } from "../components/ConfirmationModal";
 import {
   Button,
   Card,
@@ -42,6 +43,10 @@ export function StudentsListPage() {
     search: debouncedSearch || undefined,
   });
   const deleteMutation = useDeleteStudent();
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const showCreated = searchParams.get("created") === "1";
   const showUpdated = searchParams.get("updated") === "1";
@@ -55,11 +60,11 @@ export function StudentsListPage() {
     return () => window.clearTimeout(id);
   }, [showCreated, showUpdated, importedCount, setSearchParams]);
 
-  const handleDelete = (id: string, name: string) => {
-    if (!window.confirm(`Delete student “${name}”? This cannot be undone.`)) {
-      return;
-    }
-    deleteMutation.mutate(id);
+  const confirmDeleteStudent = () => {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => setDeleteTarget(null),
+    });
   };
 
   const totalPages = data?.totalPages ?? 0;
@@ -71,12 +76,28 @@ export function StudentsListPage() {
     ...STUDENT_CLASS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
   ];
 
-  const hasListFilters = Boolean(
-    (isSchool && classFilter) || debouncedSearch,
-  );
+  const hasListFilters = Boolean((isSchool && classFilter) || debouncedSearch);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      <ConfirmationModal
+        open={deleteTarget != null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete student?"
+        description={
+          deleteTarget ? (
+            <>
+              Delete student “<strong>{deleteTarget.name}</strong>”? This cannot
+              be undone.
+            </>
+          ) : null
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        isConfirming={deleteMutation.isPending}
+        onConfirm={confirmDeleteStudent}
+      />
       {showCreated && (
         <div
           className="rounded-lg bg-accent px-4 py-3 text-sm text-accent-foreground shadow-md shadow-primary/10 transition-opacity duration-300"
@@ -142,11 +163,7 @@ export function StudentsListPage() {
               label="Class"
               name="filter-class"
               options={classOptions}
-              value={
-                classFilter === ""
-                  ? SELECT_EMPTY_VALUE
-                  : classFilter
-              }
+              value={classFilter === "" ? SELECT_EMPTY_VALUE : classFilter}
               onValueChange={(v) => {
                 setPage(1);
                 setClassFilter(
@@ -159,18 +176,6 @@ export function StudentsListPage() {
       </div>
 
       <Card className="p-0! overflow-hidden">
-        <div className="border-b border-border px-6 py-4">
-          <CardTitle className="text-lg">All students</CardTitle>
-          <CardDescription>
-            {data != null && (
-              <>
-                Showing {data.data.length} of {data.total} student
-                {data.total === 1 ? "" : "s"}.
-              </>
-            )}
-          </CardDescription>
-        </div>
-
         {isLoading && (
           <p className="px-6 py-8 text-sm text-muted-foreground">Loading…</p>
         )}
@@ -237,7 +242,7 @@ export function StudentsListPage() {
                     <td className="px-6 py-3 text-muted-foreground">
                       {isSchool
                         ? `${s.class ?? "—"} · ${s.section ?? "—"}`
-                        : s.course?.name ?? s.courseId ?? "—"}
+                        : (s.course?.name ?? s.courseId ?? "—")}
                     </td>
                     <td className="px-6 py-3 text-muted-foreground">
                       {s.parentName}
@@ -263,7 +268,12 @@ export function StudentsListPage() {
                           type="button"
                           className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
                           disabled={deleteMutation.isPending}
-                          onClick={() => handleDelete(s.id, s.studentName)}
+                          onClick={() =>
+                            setDeleteTarget({
+                              id: s.id,
+                              name: s.studentName,
+                            })
+                          }
                         >
                           Delete
                         </button>

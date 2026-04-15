@@ -2,9 +2,16 @@ export type {
   LoginApiPayload,
   LoginRequest,
   LoginResponse,
+  PasswordResetMessageResponse,
 } from "./auth.types";
-export type { AuthMeResponse, TenantType } from "./tenant.types";
 export type {
+  AuthMeResponse,
+  PatchTenantResponse,
+  TenantType,
+} from "./tenant.types";
+export type {
+  AddInstallmentsPayload,
+  AddInstallmentsResult,
   AssignTemplateToFeesPayload,
   AssignTemplateToFeesResult,
   FeeDto,

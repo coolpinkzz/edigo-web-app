@@ -17,6 +17,12 @@ export interface IPayment extends Document {
 
   /** Amount in smallest currency unit (e.g. paise for INR), aligned with Razorpay. */
   amount: number;
+  /** Portion of `amount` allocated to fee principal (paise). */
+  principalAmount?: number;
+  /** Portion of `amount` allocated to overdue penalty (paise). */
+  penaltyAmount?: number;
+  /** Overdue days at order creation for installment payments. */
+  overdueDaysAtCreation?: number;
   currency: string;
 
   status: PaymentStatus;
@@ -54,6 +60,9 @@ const PaymentSchema = new Schema<IPayment>(
     installmentId: { type: String, trim: true, index: true, sparse: true },
 
     amount: { type: Number, required: true },
+    principalAmount: { type: Number, min: 0 },
+    penaltyAmount: { type: Number, min: 0 },
+    overdueDaysAtCreation: { type: Number, min: 0 },
     currency: { type: String, required: true, default: "INR", trim: true },
 
     status: {

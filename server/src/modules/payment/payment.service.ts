@@ -11,8 +11,11 @@ import { IPayment, Payment, PaymentStatus } from "./payment.model";
 import type { CreateOrderBody } from "./payment.validation";
 import { ReminderToken } from "../reminder/reminder-token.model";
 import { ensureInvoiceForPayment } from "../invoice/invoice.service";
+import { DAY_MS, startOfBusinessDay } from "../../config/timezone";
 
 const SCOPE = "payment.service";
+const DAILY_PENALTY_GRACE_DAYS = 0;
+const DAILY_PENALTY_CAP_RATIO = 0.25;
 
 /** Passed from HTTP handler so service logs can be correlated with `payment.webhook` lines. */
 export type WebhookRequestContext = {
@@ -107,7 +110,14 @@ async function loadFeeForTenant(
 async function computeRemainingPaise(
   fee: IFee,
   installmentId: string | undefined,
-): Promise<{ remainingPaise: number; installmentId?: string }> {
+): Promise<{
+  remainingPaise: number;
+  principalRemainingPaise: number;
+  penaltyRemainingPaise: number;
+  overdueDays: number;
+  installmentId?: string;
+}> {
+  const now = new Date();
   const instCount = await Installment.countDocuments({
     feeId: fee._id.toString(),
   }).exec();
@@ -123,11 +133,38 @@ async function computeRemainingPaise(
     if (!inst) {
       throw new Error("Installment not found for this fee");
     }
+
+    const todayStart = startOfBusinessDay(now);
+    const dueStart = startOfBusinessDay(inst.dueDate);
+    const rawDaysOverdue = Math.max(
+      0,
+      Math.floor((todayStart.getTime() - dueStart.getTime()) / DAY_MS),
+    );
+    const overdueDays = Math.max(
+      0,
+      rawDaysOverdue - DAILY_PENALTY_GRACE_DAYS,
+    );
+
+    const dailyPenaltyRupees = Math.max(0, inst.lateFee ?? 0);
+    const accruedPenaltyRupees = overdueDays * dailyPenaltyRupees;
+    const penaltyCapRupees = Math.max(0, inst.amount * DAILY_PENALTY_CAP_RATIO);
+    const cappedPenaltyRupees = Math.min(accruedPenaltyRupees, penaltyCapRupees);
+    const penaltyPaidRupees = Math.max(0, inst.lateFeePaid ?? 0);
+    const penaltyRemainingRupees = Math.max(
+      0,
+      cappedPenaltyRupees - penaltyPaidRupees,
+    );
+
     const instRemaining = Math.max(0, inst.amount - inst.paidAmount);
     const feeRemaining = Math.max(0, fee.totalAmount - fee.paidAmount);
-    const remainingRupees = Math.min(instRemaining, feeRemaining);
+    const principalRemainingRupees = Math.min(instRemaining, feeRemaining);
+    const principalRemainingPaise = rupeesToPaise(principalRemainingRupees);
+    const penaltyRemainingPaise = rupeesToPaise(penaltyRemainingRupees);
     return {
-      remainingPaise: rupeesToPaise(remainingRupees),
+      remainingPaise: principalRemainingPaise + penaltyRemainingPaise,
+      principalRemainingPaise,
+      penaltyRemainingPaise,
+      overdueDays,
       installmentId: inst._id.toString(),
     };
   }
@@ -137,7 +174,26 @@ async function computeRemainingPaise(
   }
 
   const remainingRupees = Math.max(0, fee.totalAmount - fee.paidAmount);
-  return { remainingPaise: rupeesToPaise(remainingRupees) };
+  const principalRemainingPaise = rupeesToPaise(remainingRupees);
+  return {
+    remainingPaise: principalRemainingPaise,
+    principalRemainingPaise,
+    penaltyRemainingPaise: 0,
+    overdueDays: 0,
+  };
+}
+
+function splitPaymentAmountPaise(
+  amountPaise: number,
+  principalRemainingPaise: number,
+  penaltyRemainingPaise: number,
+): { principalAmountPaise: number; penaltyAmountPaise: number } {
+  const penaltyAmountPaise = Math.min(amountPaise, penaltyRemainingPaise);
+  const principalAmountPaise = Math.min(
+    amountPaise - penaltyAmountPaise,
+    principalRemainingPaise,
+  );
+  return { principalAmountPaise, penaltyAmountPaise };
 }
 
 export interface CreateOrderResult {
@@ -181,10 +237,13 @@ export async function createOrder(
     throw new Error("Student not found for this tenant");
   }
 
-  const { remainingPaise, installmentId } = await computeRemainingPaise(
-    fee,
-    body.installmentId,
-  );
+  const {
+    remainingPaise,
+    principalRemainingPaise,
+    penaltyRemainingPaise,
+    overdueDays,
+    installmentId,
+  } = await computeRemainingPaise(fee, body.installmentId);
 
   if (remainingPaise <= 0) {
     throw new Error("Nothing left to pay for this fee or installment");
@@ -201,6 +260,11 @@ export async function createOrder(
   }
 
   const currency = body.currency.toUpperCase();
+  const { principalAmountPaise, penaltyAmountPaise } = splitPaymentAmountPaise(
+    amountPaise,
+    principalRemainingPaise,
+    penaltyRemainingPaise,
+  );
   const payloadHash = hashCreateOrderPayload({
     feeId: body.feeId,
     installmentId,
@@ -273,6 +337,9 @@ export async function createOrder(
       feeId: body.feeId,
       ...(installmentId ? { installmentId } : {}),
       amount: amountPaise,
+      principalAmount: principalAmountPaise,
+      penaltyAmount: penaltyAmountPaise,
+      ...(installmentId ? { overdueDaysAtCreation: overdueDays } : {}),
       currency,
       status: "INITIATED",
       razorpayOrderId: order.id,
@@ -388,8 +455,13 @@ async function refreshStaleInitiatedPaymentForPayToken(
   body: CreateOrderBody,
   installmentId: string | undefined,
 ): Promise<Extract<PayCheckoutResult, { ok: true }>> {
-  const { remainingPaise, installmentId: resolvedInst } =
-    await computeRemainingPaise(fee, installmentId);
+  const {
+    remainingPaise,
+    principalRemainingPaise,
+    penaltyRemainingPaise,
+    overdueDays,
+    installmentId: resolvedInst,
+  } = await computeRemainingPaise(fee, installmentId);
   if (remainingPaise <= 0) {
     paymentDoc.status = "FAILED";
     paymentDoc.failureReason = "nothing_to_pay_on_refresh";
@@ -406,6 +478,11 @@ async function refreshStaleInitiatedPaymentForPayToken(
   }
 
   const currency = body.currency.toUpperCase();
+  const { principalAmountPaise, penaltyAmountPaise } = splitPaymentAmountPaise(
+    amountPaise,
+    principalRemainingPaise,
+    penaltyRemainingPaise,
+  );
   const payloadHash = hashCreateOrderPayload({
     feeId: body.feeId,
     installmentId: resolvedInst,
@@ -438,6 +515,9 @@ async function refreshStaleInitiatedPaymentForPayToken(
 
   paymentDoc.razorpayOrderId = order.id;
   paymentDoc.amount = amountPaise;
+  paymentDoc.principalAmount = principalAmountPaise;
+  paymentDoc.penaltyAmount = penaltyAmountPaise;
+  paymentDoc.overdueDaysAtCreation = resolvedInst ? overdueDays : 0;
   paymentDoc.currency = currency;
   paymentDoc.idempotencyPayloadHash = payloadHash;
   await paymentDoc.save();
@@ -767,17 +847,79 @@ async function applyCapturedPayment(
     throw new Error("Captured amount is zero");
   }
 
-  const creditRupees = paiseToRupees(cap);
-
-  const { credited } = await applyPaymentCredit(
-    paymentDoc.tenantId,
-    paymentDoc.feeId,
-    paymentDoc.installmentId,
-    creditRupees,
-    session,
+  const requestedPenaltyPaise = Math.min(
+    cap,
+    Math.max(0, paymentDoc.penaltyAmount ?? 0),
   );
+  let appliedPenaltyPaise = 0;
 
-  if (credited <= 0) {
+  if (requestedPenaltyPaise > 0) {
+    if (!paymentDoc.installmentId || !mongoose.isValidObjectId(paymentDoc.installmentId)) {
+      logger.warn(
+        SCOPE,
+        "payment has penalty component without valid installment; falling back to principal",
+        { paymentId: paymentDoc._id.toString() },
+      );
+    } else {
+      let iq = Installment.findOne({
+        _id: paymentDoc.installmentId,
+        feeId: paymentDoc.feeId,
+      });
+      iq = iq.session(session);
+      const inst = await iq.exec();
+      if (!inst) {
+        throw new Error("Installment not found while applying penalty");
+      }
+
+      const todayStart = startOfBusinessDay(new Date());
+      const dueStart = startOfBusinessDay(inst.dueDate);
+      const rawDaysOverdue = Math.max(
+        0,
+        Math.floor((todayStart.getTime() - dueStart.getTime()) / DAY_MS),
+      );
+      const overdueDays = Math.max(
+        0,
+        rawDaysOverdue - DAILY_PENALTY_GRACE_DAYS,
+      );
+      const dailyPenaltyRupees = Math.max(0, inst.lateFee ?? 0);
+      const accruedPenaltyRupees = overdueDays * dailyPenaltyRupees;
+      const penaltyCapRupees = Math.max(
+        0,
+        inst.amount * DAILY_PENALTY_CAP_RATIO,
+      );
+      const cappedPenaltyRupees = Math.min(
+        accruedPenaltyRupees,
+        penaltyCapRupees,
+      );
+      const penaltyRoomRupees = Math.max(
+        0,
+        cappedPenaltyRupees - Math.max(0, inst.lateFeePaid ?? 0),
+      );
+      const penaltyRoomPaise = rupeesToPaise(penaltyRoomRupees);
+
+      appliedPenaltyPaise = Math.min(requestedPenaltyPaise, penaltyRoomPaise);
+      if (appliedPenaltyPaise > 0) {
+        inst.lateFeePaid =
+          Math.max(0, inst.lateFeePaid ?? 0) + paiseToRupees(appliedPenaltyPaise);
+        await inst.save({ session });
+      }
+    }
+  }
+
+  const principalPaiseToApply = cap - appliedPenaltyPaise;
+  let principalCreditedRupees = 0;
+  if (principalPaiseToApply > 0) {
+    const { credited } = await applyPaymentCredit(
+      paymentDoc.tenantId,
+      paymentDoc.feeId,
+      paymentDoc.installmentId,
+      paiseToRupees(principalPaiseToApply),
+      session,
+    );
+    principalCreditedRupees = credited;
+  }
+
+  if (appliedPenaltyPaise <= 0 && principalCreditedRupees <= 0) {
     throw new Error("No credit applied");
   }
 
@@ -789,11 +931,13 @@ async function applyCapturedPayment(
     paymentRecordId: paymentDoc._id.toString(),
     orderId: paymentDoc.razorpayOrderId,
     razorpayPaymentId,
-    creditedRupees: credited,
+    creditedRupees: paiseToRupees(cap),
+    principalCreditedRupees,
+    penaltyAppliedPaise: appliedPenaltyPaise,
     paiseRequested: cap,
   });
 
-  return { creditedRupees: credited, appliedPaise: cap };
+  return { creditedRupees: paiseToRupees(cap), appliedPaise: cap };
 }
 
 export async function processWebhook(
