@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ConfirmationModal } from "../components/ConfirmationModal";
-import { Button, Card, CardDescription, CardTitle } from "../components/ui";
+import { Button, Card } from "../components/ui";
 import { useDeleteFeeTemplate } from "../hooks/useDeleteFeeTemplate";
 import { useFeeTemplates } from "../hooks/useFeeTemplates";
 import { getErrorMessage } from "../utils";

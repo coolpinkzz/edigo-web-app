@@ -10,6 +10,10 @@ const connectionOptions: mongoose.ConnectOptions = {
  * Connects to MongoDB using the URI from environment config.
  */
 export async function connectDB(): Promise<void> {
+  if (!env.mongoUri) {
+    console.error("MONGODB_URI is not set");
+    process.exit(1);
+  }
   try {
     await mongoose.connect(env.mongoUri, connectionOptions);
     console.log('MongoDB connected successfully');

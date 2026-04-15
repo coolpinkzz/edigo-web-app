@@ -4,8 +4,6 @@ import { ConfirmationModal } from "../components/ConfirmationModal";
 import {
   Button,
   Card,
-  CardDescription,
-  CardTitle,
   Input,
   SELECT_EMPTY_VALUE,
   SelectField,

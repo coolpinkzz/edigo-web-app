@@ -13,6 +13,17 @@ import { sendSms } from "../reminder/sms.service";
 const SALT_ROUNDS = 12;
 const LOG_SCOPE = "auth.invite";
 
+function signAccessToken(payload: JwtPayload): string {
+  if (!env.jwtSecret) {
+    throw new Error("JWT_SECRET is not configured");
+  }
+  const options: jwt.SignOptions = {};
+  if (env.jwtExpiresIn) {
+    options.expiresIn = env.jwtExpiresIn as jwt.SignOptions["expiresIn"];
+  }
+  return jwt.sign(payload, env.jwtSecret, options);
+}
+
 export interface SignupInput {
   /** For new tenant: org name. Creates tenant + admin user. */
   tenantName: string;
@@ -82,9 +93,7 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
     name: user.name,
   };
 
-  const token = jwt.sign(payload, env.jwtSecret, {
-    expiresIn: env.jwtExpiresIn as string,
-  } as jwt.SignOptions);
+  const token = signAccessToken(payload);
 
   return {
     token,
@@ -134,9 +143,7 @@ export async function login(input: LoginInput): Promise<AuthResult> {
     name: user.name,
   };
 
-  const token = jwt.sign(payload, env.jwtSecret, {
-    expiresIn: env.jwtExpiresIn as string,
-  } as jwt.SignOptions);
+  const token = signAccessToken(payload);
 
   return {
     token,
