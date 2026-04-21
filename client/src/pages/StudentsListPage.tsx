@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ConfirmationModal } from "../components/ConfirmationModal";
 import {
   Button,
@@ -17,6 +17,12 @@ import type { StudentClass } from "../types";
 import { getErrorMessage } from "../utils";
 
 const PAGE_SIZE = 20;
+
+function formatCourseDurationMonths(months: number | undefined): string {
+  if (months == null || !Number.isFinite(months)) return "—";
+  const n = Math.round(months);
+  return `${n} month${n === 1 ? "" : "s"}`;
+}
 
 /**
  * Paginated student list with optional search and class filters and CRUD entry points.
@@ -45,6 +51,7 @@ export function StudentsListPage() {
     id: string;
     name: string;
   } | null>(null);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const showCreated = searchParams.get("created") === "1";
   const showUpdated = searchParams.get("updated") === "1";
@@ -214,12 +221,18 @@ export function StudentsListPage() {
 
         {!isLoading && !isError && data && data.data.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-left text-sm">
+            <table className="w-full min-w-[52rem] text-left text-sm">
               <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
                 <tr>
                   <th className="px-6 py-3 font-medium">Student</th>
                   <th className="px-6 py-3 font-medium">
                     {isSchool ? "Class" : "Course"}
+                  </th>
+                  <th className="px-6 py-3 font-medium whitespace-nowrap">
+                    Scholar ID
+                  </th>
+                  <th className="px-6 py-3 font-medium whitespace-nowrap">
+                    Course duration
                   </th>
                   <th className="px-6 py-3 font-medium">Parent</th>
                   <th className="px-6 py-3 font-medium">Phone</th>
@@ -228,19 +241,25 @@ export function StudentsListPage() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {data.data.map((s) => (
-                  <tr key={s.id} className="bg-card hover:bg-muted/80">
+                  <tr
+                    key={s.id}
+                    className="cursor-pointer bg-card transition-colors hover:bg-muted/80"
+                    onClick={() => navigate(`/students/${s.id}`)}
+                    aria-label={`Open profile for ${s.studentName}`}
+                  >
                     <td className="px-6 py-3 font-medium text-foreground">
-                      <Link
-                        to={`/students/${s.id}`}
-                        className="text-primary hover:underline"
-                      >
-                        {s.studentName}
-                      </Link>
+                      {s.studentName}
                     </td>
                     <td className="px-6 py-3 text-muted-foreground">
                       {isSchool
                         ? `${s.class ?? "—"} · ${s.section ?? "—"}`
                         : (s.course?.name ?? s.courseId ?? "—")}
+                    </td>
+                    <td className="px-6 py-3 font-mono text-sm tabular-nums text-muted-foreground">
+                      {s.scholarId?.trim() ? s.scholarId : "—"}
+                    </td>
+                    <td className="px-6 py-3 tabular-nums text-muted-foreground">
+                      {formatCourseDurationMonths(s.courseDurationMonths)}
                     </td>
                     <td className="px-6 py-3 text-muted-foreground">
                       {s.parentName}
@@ -249,13 +268,10 @@ export function StudentsListPage() {
                       {s.parentPhoneNumber}
                     </td>
                     <td className="px-6 py-3 text-right">
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <Link
-                          to={`/students/${s.id}`}
-                          className="text-sm font-medium text-primary hover:underline"
-                        >
-                          Profile
-                        </Link>
+                      <div
+                        className="flex flex-wrap items-center justify-end gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Link
                           to={`/students/${s.id}/edit`}
                           className="text-sm font-medium text-primary hover:underline"

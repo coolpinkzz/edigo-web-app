@@ -7,6 +7,7 @@ import type {
   StudentDto,
   StudentClass,
   StudentFeeOverviewSortBy,
+  StudentGender,
   StudentImportValidRow,
   StudentSection,
   StudentStatus,
@@ -15,6 +16,48 @@ import type {
 } from "../types";
 import { ymdToBusinessMidnightIso } from "../utils/timezone";
 import { apiClient } from "./client";
+
+const ALLOWED_STUDENT_PHOTO_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+/** Max upload size (must match server presign policy). */
+export const STUDENT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+export async function uploadStudentPhotoAndGetUrl(
+  studentId: string,
+  file: File,
+): Promise<string> {
+  if (file.size > STUDENT_PHOTO_MAX_BYTES) {
+    throw new Error("Photo must be at most 5 MB.");
+  }
+  const contentType = file.type;
+  if (!ALLOWED_STUDENT_PHOTO_TYPES.has(contentType)) {
+    throw new Error("Choose a JPEG, PNG, WebP, or GIF image.");
+  }
+  const { data } = await apiClient.post<{
+    uploadUrl: string;
+    publicUrl: string;
+    expiresIn: number;
+    maxBytes: number;
+  }>(`/students/${studentId}/photo/presign`, { contentType });
+  const res = await fetch(data.uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: {
+      "Content-Type": contentType,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(
+      "Could not upload the photo. Check storage settings or try again.",
+    );
+  }
+  return data.publicUrl;
+}
 
 export interface ListStudentsParams {
   page?: number;
@@ -59,20 +102,26 @@ export function studentToFormValues(s: StudentDto): CreateStudentFormValues {
     studentName: s.studentName,
     parentName: s.parentName,
     parentPhoneNumber: s.parentPhoneNumber,
+    alternatePhone: s.alternatePhone ?? "",
     scholarId: s.scholarId ?? "",
     panNumber: s.panNumber ?? "",
+    dateOfBirth: s.dateOfBirth ? String(s.dateOfBirth).slice(0, 10) : "",
+    gender: (s.gender as StudentGender | undefined) ?? "",
+    address: s.address ?? "",
     class: s.class ?? "1st",
     section: s.section ?? "A",
     courseId: s.courseId ?? "",
+    courseDurationMonths:
+      s.courseDurationMonths != null ? String(s.courseDurationMonths) : "",
     feeTemplateId: "",
     feeTemplateDiscountPercent: "",
     assignmentAnchorDate: "",
     feeEndDate: "",
     useCustomInstallments: false,
     customInstallments: [],
+    photoUrl: s.photoUrl ?? "",
   };
 }
-
 
 export function buildStudentJsonBody(
   values: CreateStudentFormValues,
@@ -81,6 +130,8 @@ export function buildStudentJsonBody(
     includeFeeAssignment?: boolean;
     /** When set, only the matching schedule fields are sent (installment anchor vs lump-sum due date). */
     feeTemplateIsInstallment?: boolean;
+    /** PATCH: send null for cleared optional profile fields. */
+    forPatch?: boolean;
   },
 ): Record<string, unknown> {
   const parentPhoneNumber = normalizeTenDigitPhone(values.parentPhoneNumber);
@@ -97,6 +148,31 @@ export function buildStudentJsonBody(
   const pan = trimOrEmpty(values.panNumber).toUpperCase();
   if (pan !== "") studentBody.panNumber = pan;
 
+  const altDigits = normalizeTenDigitPhone(values.alternatePhone ?? "");
+
+  const forPatch = options?.forPatch === true;
+  const dobRaw = trimOrEmpty(values.dateOfBirth ?? "");
+  const genderRaw = trimOrEmpty(values.gender ?? "");
+  const addrRaw = trimOrEmpty(values.address ?? "");
+  if (forPatch) {
+    studentBody.dateOfBirth = dobRaw === "" ? null : dobRaw;
+    studentBody.gender = genderRaw === "" ? null : genderRaw;
+    studentBody.address = addrRaw === "" ? null : addrRaw;
+    studentBody.alternatePhone = altDigits === "" ? null : altDigits;
+  } else {
+    if (dobRaw !== "") studentBody.dateOfBirth = dobRaw;
+    if (genderRaw !== "") studentBody.gender = genderRaw;
+    if (addrRaw !== "") studentBody.address = addrRaw;
+    if (altDigits !== "") studentBody.alternatePhone = altDigits;
+  }
+
+  const photoRaw = trimOrEmpty(values.photoUrl ?? "");
+  if (forPatch) {
+    studentBody.photoUrl = photoRaw === "" ? null : photoRaw;
+  } else if (photoRaw !== "") {
+    studentBody.photoUrl = photoRaw;
+  }
+
   if (tenantType === "SCHOOL") {
     studentBody.class = values.class;
     studentBody.section = values.section;
@@ -104,6 +180,15 @@ export function buildStudentJsonBody(
     if (cid !== undefined) studentBody.courseId = cid;
   } else {
     studentBody.courseId = trimOrEmpty(values.courseId);
+    const cdRaw = trimOrEmpty(values.courseDurationMonths ?? "");
+    const cdNum = Number(cdRaw);
+    const valid =
+      cdRaw !== "" && Number.isInteger(cdNum) && cdNum >= 1 && cdNum <= 12;
+    if (forPatch) {
+      studentBody.courseDurationMonths = valid ? cdNum : null;
+    } else if (valid) {
+      studentBody.courseDurationMonths = cdNum;
+    }
   }
 
   let feeAssignment: Record<string, unknown> | undefined;
@@ -113,7 +198,9 @@ export function buildStudentJsonBody(
       feeAssignment = {
         templateId: tid,
       };
-      const discountRaw = trimOrUndefined(values.feeTemplateDiscountPercent ?? "");
+      const discountRaw = trimOrUndefined(
+        values.feeTemplateDiscountPercent ?? "",
+      );
       if (discountRaw !== undefined) {
         const discount = Number(discountRaw);
         if (Number.isFinite(discount)) {
@@ -236,7 +323,7 @@ export async function updateStudent(
 ): Promise<StudentDto> {
   const { data } = await apiClient.patch<StudentDto>(
     `/students/${studentId}`,
-    buildStudentJsonBody(values, tenantType),
+    buildStudentJsonBody(values, tenantType, { forPatch: true }),
   );
   return data;
 }

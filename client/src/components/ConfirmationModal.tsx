@@ -6,6 +6,8 @@ export type ConfirmationModalProps = {
   open: boolean;
   /** Called when the user dismisses via backdrop, Escape, or Cancel (pass `false`). */
   onOpenChange: (open: boolean) => void;
+  /** Optional visual (e.g. avatar) shown above the title. */
+  media?: ReactNode;
   title: string;
   description?: ReactNode;
   /** Primary action (e.g. submit). */
@@ -24,6 +26,7 @@ export type ConfirmationModalProps = {
 export function ConfirmationModal({
   open,
   onOpenChange,
+  media,
   title,
   description,
   onConfirm,
@@ -76,6 +79,9 @@ export function ConfirmationModal({
         aria-describedby={description ? descId : undefined}
         className="relative z-[1] w-full max-w-md rounded-2xl border border-card-border bg-card p-6 shadow-xl shadow-black/[0.12]"
       >
+        {media != null && (
+          <div className="mb-4 flex justify-center">{media}</div>
+        )}
         <h2
           id={titleId}
           className="text-lg font-semibold text-foreground"

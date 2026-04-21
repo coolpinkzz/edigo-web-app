@@ -17,6 +17,10 @@ import {
   parseImportExcel,
   validateImportRows,
 } from "./student-import.service";
+import {
+  isStudentPhotoUploadConfigured,
+  presignStudentPhotoPut,
+} from "./student-photo-s3.service";
 
 /**
  * HTTP handlers for students. Input is already validated by Joi in `routes/student.routes.ts`
@@ -87,6 +91,11 @@ export async function create(req: Request, res: Response): Promise<void> {
       alternatePhone: student.alternatePhone,
       parentEmail: student.parentEmail,
       panNumber: student.panNumber,
+      dateOfBirth: student.dateOfBirth,
+      gender: student.gender,
+      address: student.address,
+      photoUrl: student.photoUrl,
+      courseDurationMonths: student.courseDurationMonths,
       class: student.class,
       section: student.section,
       courseId: student.courseId,
@@ -107,6 +116,42 @@ export async function create(req: Request, res: Response): Promise<void> {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to create student";
+    res.status(400).json({ error: message });
+  }
+}
+
+/**
+ * POST /students/:id/photo/presign — presigned S3 PUT for a student profile photo (STAFF+).
+ */
+export async function presignStudentPhoto(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!isStudentPhotoUploadConfigured()) {
+      res.status(503).json({
+        error:
+          "Photo upload is not configured. Set AWS_REGION and AWS_S3_BUCKET on the server.",
+      });
+      return;
+    }
+    const tenantId = req.user!.tenantId;
+    const studentId = req.params.id;
+    const existing = await studentService.getStudentById(tenantId, studentId);
+    if (!existing) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+    const contentType = (req.body as { contentType: string }).contentType;
+    const result = await presignStudentPhotoPut(
+      tenantId,
+      studentId,
+      contentType,
+    );
+    res.json(result);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to prepare photo upload";
     res.status(400).json({ error: message });
   }
 }

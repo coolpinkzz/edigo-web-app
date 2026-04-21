@@ -1,10 +1,14 @@
 import type {
   AuthMeResponse,
+  CreateRazorpayLinkedAccountBody,
+  CreateRazorpayLinkedAccountResponse,
   LoginApiPayload,
   LoginRequest,
   LoginResponse,
   PatchTenantResponse,
   PasswordResetMessageResponse,
+  RazorpayRouteSettlementsBody,
+  RazorpayRouteSettlementsResponse,
 } from "../types";
 import { getTenantSlug } from "../utils/tenantSlug";
 import { apiClient } from "./client";
@@ -47,6 +51,28 @@ export async function patchTenant(body: {
 }): Promise<PatchTenantResponse> {
   const { data } = await apiClient.patch<PatchTenantResponse>(
     "/auth/tenant",
+    body,
+  );
+  return data;
+}
+
+/** POST /auth/razorpay-linked-account — tenant admin: Razorpay Route linked account. */
+export async function createRazorpayLinkedAccount(
+  body: CreateRazorpayLinkedAccountBody,
+): Promise<CreateRazorpayLinkedAccountResponse> {
+  const { data } = await apiClient.post<CreateRazorpayLinkedAccountResponse>(
+    "/auth/razorpay-linked-account",
+    body,
+  );
+  return data;
+}
+
+/** POST /auth/razorpay-route-settlements — Route product + settlement bank (server-only). */
+export async function createRazorpayRouteSettlements(
+  body: RazorpayRouteSettlementsBody,
+): Promise<RazorpayRouteSettlementsResponse> {
+  const { data } = await apiClient.post<RazorpayRouteSettlementsResponse>(
+    "/auth/razorpay-route-settlements",
     body,
   );
   return data;

@@ -234,7 +234,9 @@ export function StudentImportPage() {
                 <tr>
                   <th className="px-4 py-3 font-medium">Row</th>
                   <th className="px-4 py-3 font-medium">Student</th>
-                  <th className="px-4 py-3 font-medium">Scholar ID</th>
+                  <th className="px-4 py-3 font-medium">
+                    Scholar ID / Roll No.
+                  </th>
                   <th className="px-4 py-3 font-medium">Parent</th>
                   <th className="px-4 py-3 font-medium">Phone</th>
                   <th className="px-4 py-3 font-medium">PAN</th>

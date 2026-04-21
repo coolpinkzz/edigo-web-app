@@ -1,7 +1,10 @@
 import path from "path";
 import swaggerJSDoc from "swagger-jsdoc";
 import {
+  COURSE_DURATION_MONTHS_MAX,
+  COURSE_DURATION_MONTHS_MIN,
   STUDENT_CLASSES,
+  STUDENT_GENDERS,
   STUDENT_SECTIONS,
 } from "../modules/student/student.model";
 
@@ -102,6 +105,9 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           alternatePhone: { type: "string" },
           parentEmail: { type: "string" },
           panNumber: { type: "string" },
+          dateOfBirth: { type: "string", format: "date-time" },
+          gender: { type: "string", enum: [...STUDENT_GENDERS] },
+          address: { type: "string", maxLength: 500 },
           class: {
             type: "string",
             nullable: true,
@@ -120,6 +126,13 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
             pattern: "^[a-f0-9]{24}$",
             description: "Course catalog id; set for academy tenants",
           },
+          courseDurationMonths: {
+            type: "integer",
+            minimum: COURSE_DURATION_MONTHS_MIN,
+            maximum: COURSE_DURATION_MONTHS_MAX,
+            description:
+              "Enrollment length in whole months (typically academy)",
+          },
           course: {
             type: "object",
             description:
@@ -136,6 +149,12 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           joinedAt: { type: "string", format: "date-time" },
           leftAt: { type: "string", format: "date-time" },
           tags: { type: "array", items: { type: "string" } },
+          photoUrl: {
+            type: "string",
+            format: "uri",
+            description:
+              "Public https URL for the student photo (stored after S3 upload)",
+          },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
         },
@@ -203,6 +222,9 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           alternatePhone: { type: "string" },
           parentEmail: { type: "string" },
           panNumber: { type: "string" },
+          dateOfBirth: { type: "string", format: "date-time" },
+          gender: { type: "string", enum: [...STUDENT_GENDERS] },
+          address: { type: "string", maxLength: 500 },
           class: {
             type: "string",
             enum: [...STUDENT_CLASSES],
@@ -218,6 +240,12 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
             pattern: "^[a-f0-9]{24}$",
             description: "Required for ACADEMY tenants (catalog id)",
           },
+          courseDurationMonths: {
+            type: "integer",
+            minimum: COURSE_DURATION_MONTHS_MIN,
+            maximum: COURSE_DURATION_MONTHS_MAX,
+            description: "Optional; enrollment length in months",
+          },
           status: {
             type: "string",
             enum: ["ACTIVE", "INACTIVE", "DROPPED"],
@@ -225,6 +253,11 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           joinedAt: { type: "string", format: "date-time" },
           leftAt: { type: "string", format: "date-time" },
           tags: { type: "array", items: { type: "string" } },
+          photoUrl: {
+            type: "string",
+            format: "uri",
+            description: "Optional profile photo URL (https)",
+          },
           feeTemplateId: {
             type: "string",
             pattern: "^[a-f0-9]{24}$",
@@ -271,12 +304,37 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           alternatePhone: { type: "string" },
           parentEmail: { type: "string" },
           panNumber: { type: "string" },
+          dateOfBirth: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+            description: "Set to null to clear",
+          },
+          gender: {
+            type: "string",
+            enum: [...STUDENT_GENDERS],
+            nullable: true,
+            description: "Set to null to clear",
+          },
+          address: {
+            type: "string",
+            maxLength: 500,
+            nullable: true,
+            description: "Set to null to clear",
+          },
           class: { type: "string", enum: [...STUDENT_CLASSES] },
           section: { type: "string", enum: [...STUDENT_SECTIONS] },
           courseId: {
             type: "string",
             pattern: "^[a-f0-9]{24}$",
             description: "Optional Course id; omit or clear to unset",
+          },
+          courseDurationMonths: {
+            type: "integer",
+            minimum: COURSE_DURATION_MONTHS_MIN,
+            maximum: COURSE_DURATION_MONTHS_MAX,
+            nullable: true,
+            description: "Set to null to clear",
           },
           status: {
             type: "string",
@@ -285,6 +343,12 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           joinedAt: { type: "string", format: "date-time" },
           leftAt: { type: "string", format: "date-time" },
           tags: { type: "array", items: { type: "string" } },
+          photoUrl: {
+            type: "string",
+            format: "uri",
+            nullable: true,
+            description: "Set to null to remove the profile photo",
+          },
         },
       },
       StudentListResponse: {

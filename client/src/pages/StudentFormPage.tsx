@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -10,7 +10,10 @@ import {
   SELECT_EMPTY_VALUE,
   SelectField,
 } from "../components/ui";
-import { studentToFormValues } from "../api/student.api";
+import {
+  STUDENT_PHOTO_MAX_BYTES,
+  studentToFormValues,
+} from "../api/student.api";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { useCourses } from "../hooks/useCourses";
 import { useCreateStudent } from "../hooks/useCreateStudent";
@@ -18,29 +21,50 @@ import { useFeeTemplates } from "../hooks/useFeeTemplates";
 import { useFeeTemplate } from "../hooks/useFeeTemplate";
 import { useStudent } from "../hooks/useStudent";
 import { useUpdateStudent } from "../hooks/useUpdateStudent";
-import { STUDENT_CLASS_OPTIONS, STUDENT_SECTION_OPTIONS } from "../types";
+import {
+  COURSE_DURATION_MONTH_OPTIONS,
+  STUDENT_CLASS_OPTIONS,
+  STUDENT_GENDER_OPTIONS,
+  STUDENT_SECTION_OPTIONS,
+} from "../types";
 import type { CreateStudentFormValues } from "../types";
 import { addDaysToISODate, todayISODate } from "../utils/installments";
 import { ymdToBusinessMidnightMs } from "../utils/timezone";
-import { getErrorMessage } from "../utils";
+import { cn, getErrorMessage } from "../utils";
 
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
+const GENDER_SELECT_OPTIONS = [
+  { value: SELECT_EMPTY_VALUE, label: "Prefer not to say" },
+  ...STUDENT_GENDER_OPTIONS,
+];
+
+const COURSE_DURATION_SELECT_OPTIONS = [
+  { value: SELECT_EMPTY_VALUE, label: "Not set" },
+  ...COURSE_DURATION_MONTH_OPTIONS,
+];
 
 const DEFAULT_VALUES: CreateStudentFormValues = {
   studentName: "",
   parentName: "",
   parentPhoneNumber: "",
+  alternatePhone: "",
   scholarId: "",
   panNumber: "",
+  dateOfBirth: "",
+  gender: "",
+  address: "",
   class: "1st",
   section: "A",
   courseId: "",
+  courseDurationMonths: "",
   feeTemplateId: "",
   feeTemplateDiscountPercent: "",
   assignmentAnchorDate: "",
   feeEndDate: "",
   useCustomInstallments: false,
   customInstallments: [],
+  photoUrl: "",
 };
 
 /**
@@ -94,17 +118,38 @@ export function StudentFormPage() {
     name: "customInstallments",
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const photoUrlWatch = watch("photoUrl");
+
+  const photoPreviewObjectUrl = useMemo(() => {
+    if (!pendingPhotoFile) return null;
+    return URL.createObjectURL(pendingPhotoFile);
+  }, [pendingPhotoFile]);
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewObjectUrl) URL.revokeObjectURL(photoPreviewObjectUrl);
+    };
+  }, [photoPreviewObjectUrl]);
+
+  const displayPhotoSrc =
+    photoPreviewObjectUrl ??
+    (String(photoUrlWatch ?? "").trim() !== ""
+      ? String(photoUrlWatch).trim()
+      : undefined);
+
   useEffect(() => {
     if (!isEdit || !studentQuery.data) return;
     reset(studentToFormValues(studentQuery.data));
+    setPendingPhotoFile(null);
   }, [isEdit, studentQuery.data, reset]);
 
   const onSubmit = (values: CreateStudentFormValues) => {
     clearErrors("root");
 
     const discountRaw = String(values.feeTemplateDiscountPercent ?? "").trim();
-    const discountNum =
-      discountRaw === "" ? Number.NaN : Number(discountRaw);
+    const discountNum = discountRaw === "" ? Number.NaN : Number(discountRaw);
     const discountLocksCustomInstallments =
       Number.isFinite(discountNum) && discountNum > 0;
     const useCustomInstallmentsEffective =
@@ -149,12 +194,17 @@ export function StudentFormPage() {
     };
 
     if (isEdit && studentId) {
-      updateMutation.mutate({ studentId, values: valuesToSave });
+      updateMutation.mutate({
+        studentId,
+        values: valuesToSave,
+        photoFile: pendingPhotoFile,
+      });
       return;
     }
     createMutation.mutate({
       values: valuesToSave,
       feeTemplateIsInstallment: selectedFeeTemplateDetails?.isInstallment,
+      photoFile: pendingPhotoFile,
     });
   };
 
@@ -254,7 +304,10 @@ export function StudentFormPage() {
   ]);
 
   useEffect(() => {
-    if (!isInstallmentTemplateSelected || !hasDiscountLockingCustomInstallments) {
+    if (
+      !isInstallmentTemplateSelected ||
+      !hasDiscountLockingCustomInstallments
+    ) {
       return;
     }
     setValue("useCustomInstallments", false);
@@ -381,7 +434,8 @@ export function StudentFormPage() {
           noValidate
         >
           <Input
-            label="Student name"
+            label="Student Name"
+            placeholder="John Doe"
             {...register("studentName", {
               required: "Student name is required",
             })}
@@ -389,11 +443,91 @@ export function StudentFormPage() {
           />
 
           <Input
-            label="Scholar ID"
-            placeholder="Optional"
+            label="Scholar Id / Roll No."
+            placeholder="Enter Scholar Id / Roll No."
             {...register("scholarId")}
             error={errors.scholarId?.message}
           />
+
+          <input type="hidden" {...register("photoUrl")} />
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-foreground">Photo</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="flex shrink-0 flex-col items-center gap-2 sm:items-start">
+                <div className="relative h-28 w-28 overflow-hidden rounded-full border border-border bg-muted">
+                  {displayPhotoSrc ? (
+                    <img
+                      src={displayPhotoSrc}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                      No photo
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {displayPhotoSrc ? "Change photo" : "Add photo"}
+                  </Button>
+                  {(pendingPhotoFile || (photoUrlWatch ?? "").trim() !== "") && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setPendingPhotoFile(null);
+                        setValue("photoUrl", "");
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="sr-only"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    if (file.size > STUDENT_PHOTO_MAX_BYTES) {
+                      setError("root", {
+                        message: "Photo must be at most 5 MB.",
+                      });
+                      return;
+                    }
+                    if (
+                      ![
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp",
+                        "image/gif",
+                      ].includes(file.type)
+                    ) {
+                      setError("root", {
+                        message: "Use a JPEG, PNG, WebP, or GIF image.",
+                      });
+                      return;
+                    }
+                    clearErrors("root");
+                    setPendingPhotoFile(file);
+                  }}
+                />
+              </div>
+              <p className="max-w-md text-xs text-muted-foreground sm:pt-1">
+                JPEG, PNG, WebP, or GIF · max 5 MB. The file is uploaded to AWS
+                S3; the public URL is stored on this student profile.
+              </p>
+            </div>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
@@ -423,6 +557,24 @@ export function StudentFormPage() {
           </div>
 
           <Input
+            label="Alternate phone"
+            placeholder="Optional · 10 digits"
+            inputMode="numeric"
+            autoComplete="tel"
+            {...register("alternatePhone", {
+              validate: (v) => {
+                const d = String(v).replace(/\D/g, "");
+                if (d === "") return true;
+                return (
+                  d.length === 10 ||
+                  "Must be exactly 10 digits (no country code)"
+                );
+              },
+            })}
+            error={errors.alternatePhone?.message}
+          />
+
+          <Input
             label="PAN"
             placeholder="e.g. ABCDE1234F"
             {...register("panNumber", {
@@ -434,6 +586,56 @@ export function StudentFormPage() {
             })}
             error={errors.panNumber?.message}
           />
+
+          <Input
+            label="Date of birth"
+            type="date"
+            {...register("dateOfBirth")}
+            error={errors.dateOfBirth?.message}
+          />
+
+          <Controller
+            name="gender"
+            control={control}
+            render={({ field }) => (
+              <SelectField
+                label="Gender"
+                name={field.name}
+                options={GENDER_SELECT_OPTIONS}
+                value={field.value === "" ? SELECT_EMPTY_VALUE : field.value}
+                onValueChange={(v) =>
+                  field.onChange(v === SELECT_EMPTY_VALUE ? "" : v)
+                }
+                onBlur={field.onBlur}
+                error={errors.gender?.message}
+              />
+            )}
+          />
+
+          <div className="w-full">
+            <label
+              htmlFor="student-address"
+              className="mb-1.5 block text-sm font-medium text-foreground/80"
+            >
+              Address
+            </label>
+            <textarea
+              id="student-address"
+              rows={3}
+              placeholder="Optional"
+              className={cn(
+                "block w-full rounded-lg border border-card-border px-3 py-2 text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30",
+                errors.address &&
+                  "border-red-400 focus:border-red-500 focus:ring-red-500/30",
+              )}
+              {...register("address")}
+            />
+            {errors.address?.message ? (
+              <p className="mt-1 text-sm text-red-600" role="alert">
+                {errors.address.message}
+              </p>
+            ) : null}
+          </div>
 
           {isSchool ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -477,50 +679,65 @@ export function StudentFormPage() {
               />
             </div>
           ) : (
-            <Controller
-              name="courseId"
-              control={control}
-              rules={{
-                validate: (v) => {
-                  if (coursesQuery.isLoading) return true;
-                  if (!v || String(v).trim() === "") {
-                    return "Course is required";
-                  }
-                  return true;
-                },
-              }}
-              render={({ field }) => (
-                <SelectField
-                  label="Course"
-                  name={field.name}
-                  options={courseOptions}
-                  value={
-                    !field.value || field.value === ""
-                      ? SELECT_EMPTY_VALUE
-                      : field.value
-                  }
-                  onValueChange={(v) =>
-                    field.onChange(v === SELECT_EMPTY_VALUE ? "" : v)
-                  }
-                  onBlur={field.onBlur}
-                  error={errors.courseId?.message}
-                  disabled={coursesQuery.isLoading}
-                />
-              )}
-            />
+            <>
+              <Controller
+                name="courseId"
+                control={control}
+                rules={{
+                  validate: (v) => {
+                    if (coursesQuery.isLoading) return true;
+                    if (!v || String(v).trim() === "") {
+                      return "Course is required";
+                    }
+                    return true;
+                  },
+                }}
+                render={({ field }) => (
+                  <SelectField
+                    label="Course"
+                    name={field.name}
+                    options={courseOptions}
+                    value={
+                      !field.value || field.value === ""
+                        ? SELECT_EMPTY_VALUE
+                        : field.value
+                    }
+                    onValueChange={(v) =>
+                      field.onChange(v === SELECT_EMPTY_VALUE ? "" : v)
+                    }
+                    onBlur={field.onBlur}
+                    error={errors.courseId?.message}
+                    disabled={coursesQuery.isLoading}
+                  />
+                )}
+              />
+              <Controller
+                name="courseDurationMonths"
+                control={control}
+                render={({ field }) => (
+                  <SelectField
+                    label="Course duration"
+                    name={field.name}
+                    options={COURSE_DURATION_SELECT_OPTIONS}
+                    value={
+                      !field.value || field.value === ""
+                        ? SELECT_EMPTY_VALUE
+                        : field.value
+                    }
+                    onValueChange={(v) =>
+                      field.onChange(v === SELECT_EMPTY_VALUE ? "" : v)
+                    }
+                    onBlur={field.onBlur}
+                    error={errors.courseDurationMonths?.message}
+                    disabled={coursesQuery.isLoading}
+                  />
+                )}
+              />
+            </>
           )}
 
           {!isEdit && (
             <div className="space-y-4 border-t border-border pt-6">
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  Fee (optional)
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Create the student&apos;s first fee from a saved template. You
-                  can add fees later from the student page if you skip this.
-                </p>
-              </div>
               {feeTemplatesQuery.isError && (
                 <p
                   className="text-sm text-amber-800 dark:text-amber-200"
@@ -551,6 +768,11 @@ export function StudentFormPage() {
                   />
                 )}
               />
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  You can add fees later from the student page if you skip this.
+                </p>
+              </div>
               {hasFeeTemplateSelected && (
                 <Input
                   type="number"
@@ -605,55 +827,53 @@ export function StudentFormPage() {
                       const switchOn =
                         field.value && !hasDiscountLockingCustomInstallments;
                       return (
-                      <div
-                        className={`flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2 ${
-                          hasDiscountLockingCustomInstallments
-                            ? "opacity-80"
-                            : ""
-                        }`}
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
-                            Customize installments for this student
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Optional override for this student only; template
-                            remains unchanged.
-                            {hasDiscountLockingCustomInstallments && (
-                              <>
-                                {" "}
-                                <span className="text-foreground">
-                                  Not available while a discount is set—clear
-                                  discount % above to customize.
-                                </span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={switchOn}
-                          disabled={hasDiscountLockingCustomInstallments}
-                          aria-disabled={hasDiscountLockingCustomInstallments}
-                          onClick={() => field.onChange(!field.value)}
-                          className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
+                        <div
+                          className={`flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2 ${
                             hasDiscountLockingCustomInstallments
-                              ? "cursor-not-allowed opacity-60"
-                              : "cursor-pointer"
-                          } ${
-                            switchOn
-                              ? "bg-primary"
-                              : "bg-muted-foreground/30"
+                              ? "opacity-80"
+                              : ""
                           }`}
                         >
-                          <span
-                            className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-card shadow transition duration-200 ${
-                              switchOn ? "translate-x-5" : "translate-x-0.5"
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              Customize installments for this student
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Optional override for this student only; template
+                              remains unchanged.
+                              {hasDiscountLockingCustomInstallments && (
+                                <>
+                                  {" "}
+                                  <span className="text-foreground">
+                                    Not available while a discount is set—clear
+                                    discount % above to customize.
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={switchOn}
+                            disabled={hasDiscountLockingCustomInstallments}
+                            aria-disabled={hasDiscountLockingCustomInstallments}
+                            onClick={() => field.onChange(!field.value)}
+                            className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${
+                              hasDiscountLockingCustomInstallments
+                                ? "cursor-not-allowed opacity-60"
+                                : "cursor-pointer"
+                            } ${
+                              switchOn ? "bg-primary" : "bg-muted-foreground/30"
                             }`}
-                          />
-                        </button>
-                      </div>
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-card shadow transition duration-200 ${
+                                switchOn ? "translate-x-5" : "translate-x-0.5"
+                              }`}
+                            />
+                          </button>
+                        </div>
                       );
                     }}
                   />

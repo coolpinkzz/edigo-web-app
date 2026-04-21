@@ -1,10 +1,14 @@
 import Joi from "joi";
 import { feeTemplateCreateOverridesSchema } from "../fee/fee.validation";
 import {
+  COURSE_DURATION_MONTHS_MAX,
+  COURSE_DURATION_MONTHS_MIN,
   STUDENT_CLASSES,
+  STUDENT_GENDERS,
   STUDENT_SECTIONS,
   STUDENT_STATUSES,
   StudentClass,
+  StudentGender,
   StudentSection,
   StudentStatus,
 } from "./student.model";
@@ -25,6 +29,12 @@ const PHONE_10 = Joi.string()
   .pattern(/^\d{10}$/)
   .messages({
     "string.pattern.base": "parentPhoneNumber must be exactly 10 digits",
+  });
+
+const PHONE_10_ALT = Joi.string()
+  .pattern(/^\d{10}$/)
+  .messages({
+    "string.pattern.base": "alternatePhone must be exactly 10 digits",
   });
 
 /** Indian PAN: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F). */
@@ -54,6 +64,28 @@ const sectionField = Joi.string()
   .valid(...STUDENT_SECTIONS)
   .messages({
     "any.only": `section must be one of: ${STUDENT_SECTIONS.join(", ")}`,
+  });
+
+const genderField = Joi.string()
+  .valid(...STUDENT_GENDERS)
+  .messages({
+    "any.only": `gender must be one of: ${STUDENT_GENDERS.join(", ")}`,
+  });
+
+const httpsPhotoUrl = Joi.string()
+  .uri({ scheme: ["https"] })
+  .max(2048)
+  .messages({
+    "string.uri": "photoUrl must be a valid https URL",
+  });
+
+const courseDurationMonthsField = Joi.number()
+  .integer()
+  .min(COURSE_DURATION_MONTHS_MIN)
+  .max(COURSE_DURATION_MONTHS_MAX)
+  .messages({
+    "number.min": `courseDurationMonths must be at least ${COURSE_DURATION_MONTHS_MIN}`,
+    "number.max": `courseDurationMonths must be at most ${COURSE_DURATION_MONTHS_MAX}`,
   });
 
 /** Must match a Course document id for this tenant when set. */
@@ -120,11 +152,12 @@ const createStudentFieldsSchema = Joi.object({
   admissionId: Joi.string().trim().optional().allow("", null).empty([null, ""]),
   scholarId: Joi.string().trim().optional().allow("", null).empty([null, ""]),
   panNumber: PAN.optional().allow("", null).empty([null, ""]),
-  alternatePhone: Joi.string()
-    .trim()
-    .optional()
-    .allow("", null)
-    .empty([null, ""]),
+  alternatePhone: Joi.alternatives()
+    .try(
+      Joi.string().trim().allow("", null).empty([null, ""]),
+      PHONE_10_ALT,
+    )
+    .optional(),
   parentEmail: Joi.string()
     .trim()
     .email()
@@ -138,6 +171,11 @@ const createStudentFieldsSchema = Joi.object({
   joinedAt: Joi.date().optional(),
   leftAt: Joi.date().optional(),
   tags: Joi.array().items(Joi.string().trim()).optional(),
+  dateOfBirth: Joi.date().optional(),
+  gender: genderField.optional().allow("", null).empty([null, ""]),
+  address: Joi.string().trim().optional().allow("", null).empty([null, ""]).max(500),
+  courseDurationMonths: courseDurationMonthsField.optional(),
+  photoUrl: httpsPhotoUrl.optional().allow("", null).empty([null, ""]),
 });
 
 /** POST /students — body */
@@ -194,11 +232,13 @@ const updateStudentBodySchema = Joi.object({
   admissionId: Joi.string().trim().optional().allow("", null).empty([null, ""]),
   scholarId: Joi.string().trim().optional().allow("", null).empty([null, ""]),
   panNumber: PAN.optional().allow("", null).empty([null, ""]),
-  alternatePhone: Joi.string()
-    .trim()
-    .optional()
-    .allow("", null)
-    .empty([null, ""]),
+  alternatePhone: Joi.alternatives()
+    .try(
+      Joi.valid(null),
+      Joi.string().trim().allow("", null).empty([null, ""]),
+      PHONE_10_ALT,
+    )
+    .optional(),
   parentEmail: Joi.string()
     .trim()
     .email()
@@ -212,6 +252,21 @@ const updateStudentBodySchema = Joi.object({
   joinedAt: Joi.date().optional(),
   leftAt: Joi.date().optional(),
   tags: Joi.array().items(Joi.string().trim()).optional(),
+  dateOfBirth: Joi.alternatives()
+    .try(Joi.date(), Joi.valid(null))
+    .optional(),
+  gender: Joi.alternatives()
+    .try(genderField, Joi.valid(null))
+    .optional(),
+  address: Joi.alternatives()
+    .try(Joi.string().trim().max(500), Joi.valid(null))
+    .optional(),
+  courseDurationMonths: Joi.alternatives()
+    .try(Joi.valid(null), courseDurationMonthsField)
+    .optional(),
+  photoUrl: Joi.alternatives()
+    .try(Joi.valid(null), httpsPhotoUrl)
+    .optional(),
 })
   .min(1)
   .messages({
@@ -300,6 +355,17 @@ export const studentIdParamsSchema = {
   params: mongoStudentIdParamsSchema,
 };
 
+const presignStudentPhotoBodySchema = Joi.object({
+  contentType: Joi.string()
+    .valid("image/jpeg", "image/png", "image/webp", "image/gif")
+    .required(),
+}).unknown(false);
+
+export const presignStudentPhotoSchema = {
+  params: mongoStudentIdParamsSchema,
+  body: presignStudentPhotoBodySchema,
+};
+
 /** POST /students/import/confirm — validated rows from /import/validate */
 const importValidRowSchema = Joi.object({
   rowIndex: Joi.number().integer().min(2).required(),
@@ -339,6 +405,11 @@ export interface CreateStudentBody {
     joinedAt?: Date;
     leftAt?: Date;
     tags?: string[];
+    dateOfBirth?: Date;
+    gender?: StudentGender;
+    address?: string;
+    courseDurationMonths?: number;
+    photoUrl?: string;
   };
   feeAssignment?: {
     templateId: string;
@@ -370,6 +441,11 @@ export interface CreateStudentBody {
   joinedAt?: Date;
   leftAt?: Date;
   tags?: string[];
+  dateOfBirth?: Date;
+  gender?: StudentGender;
+  address?: string;
+  courseDurationMonths?: number;
+  photoUrl?: string;
   /** Optional: instantiate this fee template for the new student (tenant-scoped). */
   feeTemplateId?: string;
   assignmentAnchorDate?: Date;
@@ -381,7 +457,10 @@ export type UpdateStudentBody = Partial<
     CreateStudentBody,
     "feeTemplateId" | "assignmentAnchorDate" | "feeOverrides"
   >
->;
+> & {
+  /** Set to `null` to remove the stored photo URL. */
+  photoUrl?: string | null;
+};
 
 export interface ListStudentsQuery {
   page: number;

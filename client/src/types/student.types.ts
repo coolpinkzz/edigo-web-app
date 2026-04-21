@@ -34,6 +34,29 @@ export const STUDENT_SECTIONS = ["A", "B", "C", "D"] as const;
 
 export type StudentSection = (typeof STUDENT_SECTIONS)[number];
 
+export const STUDENT_GENDERS = ["MALE", "FEMALE", "OTHER"] as const;
+
+export type StudentGender = (typeof STUDENT_GENDERS)[number];
+
+export const STUDENT_GENDER_OPTIONS: { value: StudentGender; label: string }[] =
+  [
+    { value: "MALE", label: "Male" },
+    { value: "FEMALE", label: "Female" },
+    { value: "OTHER", label: "Other" },
+  ];
+
+export const COURSE_DURATION_MONTHS_MIN = 1;
+export const COURSE_DURATION_MONTHS_MAX = 12;
+
+export const COURSE_DURATION_MONTH_OPTIONS: { value: string; label: string }[] =
+  Array.from({ length: COURSE_DURATION_MONTHS_MAX }, (_, i) => {
+    const n = i + COURSE_DURATION_MONTHS_MIN;
+    return {
+      value: String(n),
+      label: `${n} month${n === 1 ? "" : "s"}`,
+    };
+  });
+
 /** Course summary on GET when tenant is ACADEMY and `courseId` is set. */
 export interface StudentCourseSummary {
   id: string;
@@ -48,13 +71,21 @@ export interface StudentDto {
   scholarId?: string;
   parentName: string;
   parentPhoneNumber: string;
+  alternatePhone?: string;
   panNumber?: string;
+  dateOfBirth?: string;
+  gender?: StudentGender;
+  address?: string;
   class: StudentClass | null;
   section: StudentSection | null;
   courseId: string | null;
+  /** Whole months, 1–12; typically academy enrollment length. */
+  courseDurationMonths?: number;
   course?: StudentCourseSummary;
   status: StudentStatus;
   joinedAt?: string;
+  /** Public https URL for profile photo (e.g. after S3 upload). */
+  photoUrl?: string;
   createdAt: string;
   updatedAt: string;
   /** Present on POST /students when `feeTemplateId` was sent and fee creation succeeded. */
@@ -74,13 +105,19 @@ export interface CreateStudentFormValues {
   studentName: string;
   parentName: string;
   parentPhoneNumber: string;
+  alternatePhone: string;
   scholarId: string;
   panNumber: string;
+  dateOfBirth: string;
+  gender: StudentGender | "";
+  address: string;
   /** Used when tenant is SCHOOL. */
   class: StudentClass | "";
   section: StudentSection | "";
   /** Used when tenant is ACADEMY (catalog id). */
   courseId: string;
+  /** Academy: optional enrollment length (1–12 months). */
+  courseDurationMonths: string;
   /** Create only: optional fee template id (POST /students `feeTemplateId`). */
   feeTemplateId: string;
   /** Create only: optional principal discount percentage (0-100) for selected fee template. */
@@ -96,6 +133,8 @@ export interface CreateStudentFormValues {
     amount: number;
     dueDate: string;
   }[];
+  /** Profile photo URL after upload; empty string means none / clear on save. */
+  photoUrl: string;
 }
 
 export const STUDENT_CLASS_OPTIONS: { value: StudentClass; label: string }[] =

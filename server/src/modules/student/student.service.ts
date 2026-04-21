@@ -16,6 +16,7 @@ import {
   IStudent,
   Student,
   StudentClass,
+  StudentGender,
   StudentSection,
   StudentStatus,
 } from "./student.model";
@@ -36,6 +37,12 @@ export interface CreateStudentInput {
   joinedAt?: Date;
   leftAt?: Date;
   tags?: string[];
+  dateOfBirth?: Date;
+  gender?: StudentGender;
+  address?: string;
+  /** Whole months, 1–12 (typically academy enrollment length). */
+  courseDurationMonths?: number;
+  photoUrl?: string;
   /** When set, a fee is created from this template after the student row is inserted. */
   feeTemplateId?: string;
   assignmentAnchorDate?: Date;
@@ -46,7 +53,14 @@ export interface CreateStudentInput {
   customInstallments?: CustomAssignmentInstallmentRow[];
 }
 
-export type UpdateStudentInput = Partial<CreateStudentInput>;
+export type UpdateStudentInput = Partial<CreateStudentInput> & {
+  dateOfBirth?: Date | null;
+  gender?: StudentGender | null;
+  address?: string | null;
+  alternatePhone?: string | null;
+  courseDurationMonths?: number | null;
+  photoUrl?: string | null;
+};
 
 export interface ListStudentsParams {
   page: number;
@@ -101,10 +115,15 @@ export interface SerializedStudent {
   class: StudentClass | null;
   section: StudentSection | null;
   courseId: string | null;
+  courseDurationMonths?: number;
   status: StudentStatus;
   joinedAt?: Date;
   leftAt?: Date;
   tags?: string[];
+  dateOfBirth?: Date;
+  gender?: StudentGender;
+  address?: string;
+  photoUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -141,10 +160,15 @@ export function serializeStudent(doc: IStudent): SerializedStudent {
     class: doc.class ?? null,
     section: doc.section ?? null,
     courseId: doc.courseId ?? null,
+    courseDurationMonths: doc.courseDurationMonths,
     status: doc.status,
     joinedAt: doc.joinedAt,
     leftAt: doc.leftAt,
     tags: doc.tags,
+    dateOfBirth: doc.dateOfBirth,
+    gender: doc.gender,
+    address: doc.address,
+    photoUrl: doc.photoUrl,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -315,6 +339,17 @@ function createStudentDocPayload(
     joinedAt: input.joinedAt,
     leftAt: input.leftAt,
     tags: input.tags,
+    ...(input.dateOfBirth != null ? { dateOfBirth: input.dateOfBirth } : {}),
+    ...(input.gender != null ? { gender: input.gender } : {}),
+    ...(input.address != null && input.address !== ""
+      ? { address: input.address }
+      : {}),
+    ...(input.courseDurationMonths != null
+      ? { courseDurationMonths: input.courseDurationMonths }
+      : {}),
+    ...(input.photoUrl != null && input.photoUrl !== ""
+      ? { photoUrl: input.photoUrl }
+      : {}),
   };
 }
 

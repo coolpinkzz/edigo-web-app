@@ -5,6 +5,7 @@ import {
   createStudentSchema,
   feeOverviewSchema,
   getStudentsSchema,
+  presignStudentPhotoSchema,
   studentIdParamsSchema,
   updateStudentSchema,
 } from "../modules/student/student.validation";
@@ -234,6 +235,15 @@ router.get(
   validate(feeOverviewSchema),
   (req, res) => {
     void studentController.feeOverview(req, res);
+  },
+);
+
+router.post(
+  "/:id/photo/presign",
+  requireRole(ROLES.STAFF),
+  validate(presignStudentPhotoSchema),
+  (req, res) => {
+    void studentController.presignStudentPhoto(req, res);
   },
 );
 

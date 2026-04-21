@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { FeeStatusBadge } from "../components/FeeStatusBadge";
 import {
@@ -26,6 +26,7 @@ import type {
   InstallmentDto,
   ManualPaymentMethod,
   PatchFeePayload,
+  StudentGender,
 } from "../types";
 import { businessDayKey, ymdToBusinessMidnightIso } from "../utils/timezone";
 import { cn, getErrorMessage } from "../utils";
@@ -43,6 +44,23 @@ function formatMoney(n: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function formatStudentDateOnly(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
+function genderLabel(g?: StudentGender): string {
+  if (!g) return "—";
+  const map: Record<StudentGender, string> = {
+    MALE: "Male",
+    FEMALE: "Female",
+    OTHER: "Other",
+  };
+  return map[g];
 }
 
 function formatDate(iso: string): string {
@@ -67,6 +85,27 @@ async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
+function DetailField({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-1.5 text-sm leading-relaxed text-foreground">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Student profile with fees list; expand a fee to load installments (GET /fees/:feeId).
  */
@@ -88,17 +127,19 @@ export function StudentDetailPage() {
     open: boolean;
     title: string;
     description: string;
+    studentPhotoUrl?: string;
   }>({ open: false, title: "", description: "" });
   const [lumpScheduleEnd, setLumpScheduleEnd] = useState("");
 
   const openPaymentValidationModal = (
     description: string,
-    title = "Cannot save payment",
+    opts?: { title?: string; studentPhotoUrl?: string },
   ) => {
     setPaymentValidationModal({
       open: true,
-      title,
+      title: opts?.title ?? "Cannot save payment",
       description,
+      studentPhotoUrl: opts?.studentPhotoUrl,
     });
   };
 
@@ -143,12 +184,15 @@ export function StudentDetailPage() {
   ) => {
     const paid = Number.parseFloat(instPaidInput);
     if (Number.isNaN(paid) || paid < 0) {
-      openPaymentValidationModal("Enter a valid paid amount (0 or more).");
+      openPaymentValidationModal("Enter a valid paid amount (0 or more).", {
+        studentPhotoUrl: student?.photoUrl,
+      });
       return;
     }
     if (paid > inst.amount + 1e-9) {
       openPaymentValidationModal(
         `Paid cannot exceed installment amount (${formatMoney(inst.amount)}).`,
+        { studentPhotoUrl: student?.photoUrl },
       );
       return;
     }
@@ -156,6 +200,7 @@ export function StudentDetailPage() {
     if (!ref) {
       openPaymentValidationModal(
         "Enter a reference (cheque no., receipt, or transaction id).",
+        { studentPhotoUrl: student?.photoUrl },
       );
       return;
     }
@@ -178,12 +223,15 @@ export function StudentDetailPage() {
   const submitLumpSumPayment = async (fee: FeeDto) => {
     const paid = Number.parseFloat(lumpPaidInput);
     if (Number.isNaN(paid) || paid < 0) {
-      openPaymentValidationModal("Enter a valid paid amount (0 or more).");
+      openPaymentValidationModal("Enter a valid paid amount (0 or more).", {
+        studentPhotoUrl: student?.photoUrl,
+      });
       return;
     }
     if (paid > fee.totalAmount + 1e-9) {
       openPaymentValidationModal(
         `Paid cannot exceed fee total (${formatMoney(fee.totalAmount)}).`,
+        { studentPhotoUrl: student?.photoUrl },
       );
       return;
     }
@@ -191,6 +239,9 @@ export function StudentDetailPage() {
     if (!ref) {
       openPaymentValidationModal(
         "Enter a reference (cheque no., receipt, or transaction id).",
+        {
+          studentPhotoUrl: student?.photoUrl,
+        },
       );
       return;
     }
@@ -227,10 +278,10 @@ export function StudentDetailPage() {
     const end = lumpScheduleEnd.trim();
     if (end) body.endDate = ymdToBusinessMidnightIso(end);
     if (Object.keys(body).length === 0) {
-      openPaymentValidationModal(
-        "Set a due date before saving.",
-        "Cannot save schedule",
-      );
+      openPaymentValidationModal("Set a due date before saving.", {
+        title: "Cannot save schedule",
+        studentPhotoUrl: student?.photoUrl,
+      });
       return;
     }
     try {
@@ -278,67 +329,180 @@ export function StudentDetailPage() {
   const feePages = feesData?.totalPages ?? 0;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <Link
-          to="/students"
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          ← Students
-        </Link>
-        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">
-              {student.studentName}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {isSchool ? (
-                <>
-                  {student.class ?? "—"} · Section {student.section ?? "—"}
-                  {student.scholarId ? ` · Scholar ${student.scholarId}` : ""}
-                </>
+    <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 sm:px-6 lg:max-w-6xl">
+      <Link
+        to="/students"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
+      >
+        <span aria-hidden>←</span>
+        Students
+      </Link>
+
+      <Card className="overflow-hidden border-border/90 shadow-sm">
+        <div className="border-b border-border bg-gradient-to-br from-muted/50 via-muted/30 to-transparent px-5 py-6 sm:px-7">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 gap-4 sm:gap-5">
+              {student.photoUrl ? (
+                <img
+                  src={student.photoUrl}
+                  alt=""
+                  className="h-24 w-24 shrink-0 rounded-2xl border border-border/80 object-cover shadow-sm ring-1 ring-black/5 sm:h-[7.25rem] sm:w-[7.25rem]"
+                />
               ) : (
-                <>
-                  {student.course?.name ?? student.courseId ?? "—"}
-                  {student.scholarId ? ` · Scholar ${student.scholarId}` : ""}
-                </>
+                <div
+                  className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-dashed border-border bg-muted/70 text-xl font-semibold text-muted-foreground sm:h-[7.25rem] sm:w-[7.25rem]"
+                  aria-hidden
+                >
+                  {student.studentName.slice(0, 1).toUpperCase()}
+                </div>
               )}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleCopyPhone()}
-            >
-              Copy parent phone
-            </Button>
-            <Link to={`/students/${studentId}/edit`}>
-              <Button type="button" variant="secondary">
-                Edit student
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                    {student.studentName}
+                  </h1>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
+                      student.status === "ACTIVE" &&
+                        "bg-emerald-500/15 text-emerald-800 dark:text-emerald-400",
+                      student.status === "INACTIVE" &&
+                        "bg-muted text-muted-foreground",
+                      student.status === "DROPPED" &&
+                        "bg-destructive/12 text-destructive",
+                    )}
+                  >
+                    {student.status.charAt(0)}
+                    {student.status.slice(1).toLowerCase()}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {isSchool ? (
+                    <>
+                      Class {student.class ?? "—"} · Section{" "}
+                      {student.section ?? "—"}
+                      {student.scholarId
+                        ? ` · Scholar ${student.scholarId}`
+                        : ""}
+                    </>
+                  ) : (
+                    <>
+                      {student.course?.name ?? "Course not set"}
+                      {student.scholarId
+                        ? ` · Scholar ${student.scholarId}`
+                        : ""}
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2 lg:pt-1">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handleCopyPhone()}
+              >
+                Copy parent phone
               </Button>
-            </Link>
+              <Link to={`/students/${studentId}/edit`}>
+                <Button type="button" variant="primary">
+                  Edit student
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
 
-      <Card className="p-0! overflow-hidden">
-        <div className="px-6 py-4">
-          <CardTitle className="text-lg ">Fees</CardTitle>
-          <CardDescription className="text-muted-foreground">
+        <div className="px-5 py-6 sm:px-7">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Profile
+          </h2>
+          <div className="mt-4 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+            <DetailField label="Date of birth">
+              {formatStudentDateOnly(student.dateOfBirth)}
+            </DetailField>
+            <DetailField label="Gender">
+              {genderLabel(student.gender)}
+            </DetailField>
+            <DetailField label="Scholar ID">
+              {student.scholarId?.trim() ? student.scholarId : "—"}
+            </DetailField>
+            {isSchool ? (
+              <>
+                <DetailField label="Class">{student.class ?? "—"}</DetailField>
+                <DetailField label="Section">
+                  {student.section ?? "—"}
+                </DetailField>
+              </>
+            ) : (
+              <>
+                <DetailField label="Course">
+                  {student.course?.name ?? "—"}
+                </DetailField>
+                <DetailField label="Course duration">
+                  {student.courseDurationMonths != null
+                    ? `${student.courseDurationMonths} month${
+                        student.courseDurationMonths === 1 ? "" : "s"
+                      }`
+                    : "—"}
+                </DetailField>
+              </>
+            )}
+            <DetailField
+              label="Address"
+              className="sm:col-span-2 lg:col-span-3"
+            >
+              {student.address?.trim() ? (
+                <span className="whitespace-pre-wrap">{student.address}</span>
+              ) : (
+                "—"
+              )}
+            </DetailField>
+          </div>
+        </div>
+
+        <div className="border-t border-border bg-muted/20 px-5 py-6 sm:px-7">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Parent / guardian
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Contact for fee reminders and follow-ups.
+          </p>
+          <div className="mt-4 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+            <DetailField label="Name">{student.parentName}</DetailField>
+            <DetailField label="Phone">
+              <span className="font-mono tabular-nums tracking-tight">
+                {student.parentPhoneNumber}
+              </span>
+            </DetailField>
+            <DetailField label="Alternate phone">
+              <span className="font-mono tabular-nums tracking-tight">
+                {student.alternatePhone?.trim() ? student.alternatePhone : "—"}
+              </span>
+            </DetailField>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden border-border/90 shadow-sm">
+        <div className="border-b border-border bg-muted/15 px-5 py-5 sm:px-7">
+          <CardTitle className="text-lg font-semibold tracking-tight">
+            Fees
+          </CardTitle>
+          <CardDescription className="mt-1 text-muted-foreground">
             Expand a fee to set due dates (lump-sum), record cash/cheque
             payments on installments, or a single lump-sum payment.
           </CardDescription>
         </div>
 
         {feesQuery.isLoading && (
-          <p className="px-6 py-8 text-sm text-muted-foreground">
+          <p className="px-5 py-8 text-sm text-muted-foreground sm:px-7">
             Loading fees…
           </p>
         )}
 
         {feesQuery.isError && (
-          <p className="px-6 py-8 text-sm text-red-600" role="alert">
+          <p className="px-5 py-8 text-sm text-red-600 sm:px-7" role="alert">
             Failed to load fees.
           </p>
         )}
@@ -347,7 +511,7 @@ export function StudentDetailPage() {
           !feesQuery.isError &&
           feesData &&
           feesData.data.length === 0 && (
-            <p className="px-6 py-8 text-sm text-muted-foreground">
+            <p className="px-5 py-10 text-center text-sm text-muted-foreground sm:px-7">
               No fees recorded for this student yet.
             </p>
           )}
@@ -827,7 +991,7 @@ export function StudentDetailPage() {
           )}
 
         {!feesQuery.isLoading && feesData && feePages > 1 && (
-          <div className="flex items-center justify-between gap-3 border-t border-border px-6 py-4">
+          <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/10 px-5 py-4 sm:px-7">
             <p className="text-sm text-muted-foreground">
               Page {feesData.page} of {feePages} · {feesData.total} fee
               {feesData.total === 1 ? "" : "s"}
@@ -860,35 +1024,19 @@ export function StudentDetailPage() {
         )}
       </Card>
 
-      <Card className="p-0! overflow-hidden">
-        <div className="border-b border-border px-6 py-4">
-          <CardTitle className="text-lg">Parent / guardian</CardTitle>
-          <CardDescription>
-            Contact for fee reminders and follow-ups.
-          </CardDescription>
-        </div>
-        <div className="grid gap-4 px-6 py-4 sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Name
-            </p>
-            <p className="text-sm text-foreground">{student.parentName}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Phone
-            </p>
-            <p className="font-mono text-sm text-foreground">
-              {student.parentPhoneNumber}
-            </p>
-          </div>
-        </div>
-      </Card>
-
       <ConfirmationModal
         open={paymentValidationModal.open}
         onOpenChange={(open) =>
           setPaymentValidationModal((prev) => ({ ...prev, open }))
+        }
+        media={
+          paymentValidationModal.studentPhotoUrl ? (
+            <img
+              src={paymentValidationModal.studentPhotoUrl}
+              alt=""
+              className="h-16 w-16 rounded-full border border-border object-cover"
+            />
+          ) : undefined
         }
         title={paymentValidationModal.title}
         description={paymentValidationModal.description}

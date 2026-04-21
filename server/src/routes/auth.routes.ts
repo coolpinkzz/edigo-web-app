@@ -13,7 +13,9 @@ import {
 } from "../middleware/rate-limit.middleware";
 import { validate } from "../middleware/validate.middleware";
 import {
+  createLinkedAccountBody,
   patchTenantBody,
+  razorpayRouteSettlementsBody,
   requestPasswordResetOtpBody,
   verifyPasswordResetOtpBody,
   resetPasswordAfterOtpBody,
@@ -220,6 +222,12 @@ const router = Router();
  *                     tenantType:
  *                       type: string
  *                       enum: [SCHOOL, ACADEMY]
+ *                     razorpayLinkedAccount:
+ *                       type: object
+ *                       properties:
+ *                         linked: { type: boolean }
+ *                         accountId: { type: string }
+ *                         status: { type: string }
  *       401:
  *         description: Missing or invalid token
  */
@@ -374,6 +382,28 @@ router.patch(
   validate({ body: patchTenantBody }),
   (req, res) => {
     void authController.patchTenant(req, res);
+  },
+);
+
+/** Tenant admin: create Razorpay Route linked account (payouts) */
+router.post(
+  "/razorpay-linked-account",
+  authenticate,
+  requireTenantAdmin,
+  validate({ body: createLinkedAccountBody }),
+  (req, res) => {
+    void authController.createRazorpayLinkedAccount(req, res);
+  },
+);
+
+/** Tenant admin: Route settlement bank (product config + PATCH settlements; server-only) */
+router.post(
+  "/razorpay-route-settlements",
+  authenticate,
+  requireTenantAdmin,
+  validate({ body: razorpayRouteSettlementsBody }),
+  (req, res) => {
+    void authController.createRazorpayRouteSettlements(req, res);
   },
 );
 

@@ -10,6 +10,7 @@ import { Student } from "../student/student.model";
 import { IPayment, Payment, PaymentStatus } from "./payment.model";
 import type { CreateOrderBody } from "./payment.validation";
 import { ReminderToken } from "../reminder/reminder-token.model";
+import { Tenant } from "../auth/tenant.model";
 import { ensureInvoiceForPayment } from "../invoice/invoice.service";
 import { DAY_MS, startOfBusinessDay } from "../../config/timezone";
 
@@ -48,6 +49,34 @@ function isDuplicateKeyError(err: unknown): boolean {
     "code" in err &&
     (err as { code: number }).code === 11000
   );
+}
+
+/**
+ * When Route is set up for the tenant, attach a single transfer on the order so the
+ * captured payment is settled to their linked account (Razorpay Route).
+ */
+async function routeTransfersForOrder(
+  tenantId: string,
+  amountPaise: number,
+  currency: string,
+): Promise<{ transfers: { account: string; amount: number; currency: string }[] } | undefined> {
+  const t = await Tenant.findById(tenantId)
+    .select("razorpayLinkedAccountId razorpayRouteProductId")
+    .lean()
+    .exec();
+  const linked = t?.razorpayLinkedAccountId?.trim();
+  const product = t?.razorpayRouteProductId?.trim();
+  if (!linked || !product) return undefined;
+
+  return {
+    transfers: [
+      {
+        account: linked,
+        amount: amountPaise,
+        currency: currency.toUpperCase(),
+      },
+    ],
+  };
 }
 
 function assertRazorpayConfigured(): void {
@@ -303,6 +332,11 @@ export async function createOrder(
 
   const receipt = `pay_${crypto.randomBytes(8).toString("hex")}`.slice(0, 40);
   const razorpay = getRazorpayClient();
+  const routeTransfers = await routeTransfersForOrder(
+    tenantId,
+    amountPaise,
+    currency,
+  );
 
   let order: {
     id: string;
@@ -322,6 +356,7 @@ export async function createOrder(
         feeId: body.feeId,
         installmentId: installmentId ?? "",
       },
+      ...(routeTransfers ?? {}),
     })) as typeof order;
   } catch (err) {
     logger.error(SCOPE, "Razorpay order creation failed", {
@@ -492,6 +527,11 @@ async function refreshStaleInitiatedPaymentForPayToken(
 
   const receipt = `pay_${crypto.randomBytes(8).toString("hex")}`.slice(0, 40);
   const razorpay = getRazorpayClient();
+  const routeTransfers = await routeTransfersForOrder(
+    paymentDoc.tenantId,
+    amountPaise,
+    currency,
+  );
 
   let order: { id: string; amount: number; currency: string };
   try {
@@ -505,6 +545,7 @@ async function refreshStaleInitiatedPaymentForPayToken(
         feeId: body.feeId,
         installmentId: resolvedInst ?? "",
       },
+      ...(routeTransfers ?? {}),
     })) as typeof order;
   } catch (err) {
     logger.error(SCOPE, "Razorpay order refresh failed (pay token)", {

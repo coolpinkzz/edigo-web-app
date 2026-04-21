@@ -26,6 +26,7 @@ router.use(authenticate);
  *     summary: Create Razorpay order and persist payment (INITIATED)
  *     description: |
  *       Validates fee/installment, prevents overpayment, creates Razorpay order, saves Payment.
+ *       If the tenant has completed Razorpay Route (linked account + route product on file), the order includes a Route `transfer` for the full amount to that linked account.
  *       Requires `Idempotency-Key` header (1–128 chars). Success is confirmed only via webhook, not the client.
  *     security:
  *       - bearerAuth: []

@@ -65,7 +65,13 @@ const PDF_TOTAL_BG = "#ccfbf1";
 const PDF_TOTAL_BORDER = "#2dd4bf";
 const PDF_TOTAL_TEXT = "#115e59";
 
-function drawSectionBar(doc: PdfDoc, x: number, y: number, w: number, title: string): number {
+function drawSectionBar(
+  doc: PdfDoc,
+  x: number,
+  y: number,
+  w: number,
+  title: string,
+): number {
   const h = 26;
   doc.rect(x, y, w, h).fill(PDF_HEADER_BG);
   doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(11);
@@ -86,7 +92,10 @@ function drawMetaTable(
   doc.rect(x, y, w, h).fill(PDF_META_BG);
   doc.strokeColor(PDF_BORDER).lineWidth(0.75);
   doc.rect(x, y, w, h).stroke();
-  doc.moveTo(x + w / 2, y).lineTo(x + w / 2, y + h).stroke();
+  doc
+    .moveTo(x + w / 2, y)
+    .lineTo(x + w / 2, y + h)
+    .stroke();
   doc.fillColor(PDF_LABEL).font("Helvetica-Bold").fontSize(9);
   doc.text("Invoice number", x + 14, y + 8, { width: w / 2 - 20 });
   doc.text("Date & time", x + w / 2 + 14, y + 8, { width: w / 2 - 20 });
@@ -128,17 +137,35 @@ function drawKeyValueTable(
   });
 
   doc.strokeColor(PDF_BORDER).lineWidth(0.75);
-  doc.moveTo(x, y).lineTo(x + w, y).stroke();
-  doc.moveTo(x, y + totalH).lineTo(x + w, y + totalH).stroke();
-  doc.moveTo(x, y).lineTo(x, y + totalH).stroke();
-  doc.moveTo(x + w, y).lineTo(x + w, y + totalH).stroke();
-  doc.moveTo(x + labelColW, y).lineTo(x + labelColW, y + totalH).stroke();
+  doc
+    .moveTo(x, y)
+    .lineTo(x + w, y)
+    .stroke();
+  doc
+    .moveTo(x, y + totalH)
+    .lineTo(x + w, y + totalH)
+    .stroke();
+  doc
+    .moveTo(x, y)
+    .lineTo(x, y + totalH)
+    .stroke();
+  doc
+    .moveTo(x + w, y)
+    .lineTo(x + w, y + totalH)
+    .stroke();
+  doc
+    .moveTo(x + labelColW, y)
+    .lineTo(x + labelColW, y + totalH)
+    .stroke();
 
   rowTop = y;
   rows.forEach((row, i) => {
     const rh = heights[i];
     if (i > 0) {
-      doc.moveTo(x, rowTop).lineTo(x + w, rowTop).stroke();
+      doc
+        .moveTo(x, rowTop)
+        .lineTo(x + w, rowTop)
+        .stroke();
     }
     doc.fillColor(PDF_LABEL).font("Helvetica-Bold").fontSize(9);
     doc.text(row.label, x + padH, rowTop + padV, { width: labelColW - 8 });
@@ -150,7 +177,13 @@ function drawKeyValueTable(
   return y + totalH;
 }
 
-function drawTotalBar(doc: PdfDoc, x: number, y: number, w: number, amountLine: string): number {
+function drawTotalBar(
+  doc: PdfDoc,
+  x: number,
+  y: number,
+  w: number,
+  amountLine: string,
+): number {
   const h = 46;
   doc.rect(x, y, w, h).fill(PDF_TOTAL_BG);
   doc.strokeColor(PDF_TOTAL_BORDER).lineWidth(0.75);
@@ -230,7 +263,10 @@ export async function getInvoiceDtoByPaymentId(
     return dto;
   }
 
-  const tenant = await Tenant.findById(inv.tenantId).select("tenantType").lean().exec();
+  const tenant = await Tenant.findById(inv.tenantId)
+    .select("tenantType")
+    .lean()
+    .exec();
   if (tenant?.tenantType !== "ACADEMY") {
     return dto;
   }
@@ -333,7 +369,7 @@ function buildInvoicePdf(dto: InvoicePublicDto): Promise<Buffer> {
       studentRows.push({ label: "Admission ID", value: dto.admissionId });
     }
     if (dto.scholarId) {
-      studentRows.push({ label: "Scholar ID", value: dto.scholarId });
+      studentRows.push({ label: "Scholar ID/Roll No.", value: dto.scholarId });
     }
     if (dto.parentName) {
       studentRows.push({ label: "Parent / guardian", value: dto.parentName });

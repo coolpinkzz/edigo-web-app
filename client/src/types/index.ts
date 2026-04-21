@@ -6,7 +6,14 @@ export type {
 } from "./auth.types";
 export type {
   AuthMeResponse,
+  CreateRazorpayLinkedAccountBody,
+  CreateRazorpayLinkedAccountResponse,
   PatchTenantResponse,
+  RazorpayLinkedAccountRemote,
+  RazorpayLinkedAccountSummary,
+  RazorpayRouteSettlementsBody,
+  RazorpayRouteSettlementsResponse,
+  RazorpayRouteSummary,
   TenantType,
 } from "./tenant.types";
 export type {
@@ -71,6 +78,7 @@ export type {
   StudentFeeOverviewRowDto,
   StudentFeeOverviewSortBy,
   StudentFeeSummaryDto,
+  StudentGender,
   StudentImportInvalidRow,
   StudentImportValidRow,
   StudentSection,
@@ -83,8 +91,13 @@ export type {
   PaginatedCourses,
 } from "./course.types";
 export {
+  COURSE_DURATION_MONTH_OPTIONS,
+  COURSE_DURATION_MONTHS_MAX,
+  COURSE_DURATION_MONTHS_MIN,
   STUDENT_CLASS_OPTIONS,
   STUDENT_CLASSES,
+  STUDENT_GENDER_OPTIONS,
+  STUDENT_GENDERS,
   STUDENT_SECTION_OPTIONS,
   STUDENT_SECTIONS,
   STUDENT_STATUSES,

@@ -1,5 +1,7 @@
 export { apiClient } from "./client";
 export {
+  createRazorpayLinkedAccount,
+  createRazorpayRouteSettlements,
   getAuthMe,
   login,
   patchTenant,
