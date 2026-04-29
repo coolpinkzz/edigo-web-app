@@ -386,12 +386,8 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           feeType: {
             type: "string",
             enum: [
-              "TUITION",
-              "TRANSPORT",
-              "HOSTEL",
               "ADMISSION",
               "RENEW",
-              "OTHER",
             ],
           },
           category: { type: "string" },
@@ -455,12 +451,8 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           feeType: {
             type: "string",
             enum: [
-              "TUITION",
-              "TRANSPORT",
-              "HOSTEL",
               "ADMISSION",
               "RENEW",
-              "OTHER",
             ],
           },
           category: { type: "string" },
@@ -481,12 +473,8 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           feeType: {
             type: "string",
             enum: [
-              "TUITION",
-              "TRANSPORT",
-              "HOSTEL",
               "ADMISSION",
               "RENEW",
-              "OTHER",
             ],
           },
           category: { type: "string" },
@@ -552,12 +540,8 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           feeType: {
             type: "string",
             enum: [
-              "TUITION",
-              "TRANSPORT",
-              "HOSTEL",
               "ADMISSION",
               "RENEW",
-              "OTHER",
             ],
           },
           category: { type: "string" },
@@ -600,12 +584,8 @@ const swaggerDefinition: swaggerJSDoc.OAS3Definition = {
           feeType: {
             type: "string",
             enum: [
-              "TUITION",
-              "TRANSPORT",
-              "HOSTEL",
               "ADMISSION",
               "RENEW",
-              "OTHER",
             ],
           },
           category: { type: "string" },

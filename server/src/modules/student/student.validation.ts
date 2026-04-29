@@ -329,7 +329,7 @@ const feeOverviewQuerySchema = Joi.object({
     .optional()
     .allow("", null)
     .empty([null, ""]),
-  /** Comma-separated fee types, e.g. `TUITION,ADMISSION,RENEW` */
+  /** Comma-separated fee types: `ADMISSION`, `RENEW` */
   feeTypes: Joi.string()
     .trim()
     .max(500)

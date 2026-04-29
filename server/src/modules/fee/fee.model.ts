@@ -1,21 +1,8 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
-export type FeeType =
-  | "TUITION"
-  | "TRANSPORT"
-  | "HOSTEL"
-  | "ADMISSION"
-  | "RENEW"
-  | "OTHER";
+export type FeeType = "ADMISSION" | "RENEW";
 
-export const FEE_TYPES: FeeType[] = [
-  "TUITION",
-  "TRANSPORT",
-  "HOSTEL",
-  "ADMISSION",
-  "RENEW",
-  "OTHER",
-];
+export const FEE_TYPES: FeeType[] = ["ADMISSION", "RENEW"];
 
 export type FeeStatus = "PENDING" | "PARTIAL" | "PAID" | "OVERDUE";
 

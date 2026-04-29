@@ -51,7 +51,7 @@ router.use(authenticate);
  *         name: feeType
  *         schema:
  *           type: string
- *           enum: [TUITION, TRANSPORT, HOSTEL, ADMISSION, RENEW, OTHER]
+ *           enum: [ADMISSION, RENEW]
  *     responses:
  *       200:
  *         description: Paginated templates

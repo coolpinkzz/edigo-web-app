@@ -91,7 +91,7 @@ router.post(
  *         name: feeType
  *         schema:
  *           type: string
- *           enum: [TUITION, TRANSPORT, HOSTEL, ADMISSION, RENEW, OTHER]
+ *           enum: [ADMISSION, RENEW]
  *     responses:
  *       200:
  *         description: Paginated fees
@@ -137,7 +137,7 @@ router.get(
  *         name: feeType
  *         schema:
  *           type: string
- *           enum: [TUITION, TRANSPORT, HOSTEL, ADMISSION, RENEW, OTHER]
+ *           enum: [ADMISSION, RENEW]
  *       - in: query
  *         name: class
  *         schema: { type: string }

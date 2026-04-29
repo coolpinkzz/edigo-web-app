@@ -1,20 +1,10 @@
 import type { StudentClass, StudentSection } from './student.types'
 
-export type FeeType =
-  | 'TUITION'
-  | 'TRANSPORT'
-  | 'HOSTEL'
-  | 'ADMISSION'
-  | 'RENEW'
-  | 'OTHER'
+export type FeeType = 'ADMISSION' | 'RENEW'
 
 export const FEE_TYPE_OPTIONS: { value: FeeType; label: string }[] = [
-  { value: 'TUITION', label: 'Tuition' },
-  { value: 'TRANSPORT', label: 'Transport' },
-  { value: 'HOSTEL', label: 'Hostel' },
   { value: 'ADMISSION', label: 'New admission' },
   { value: 'RENEW', label: 'Renew' },
-  { value: 'OTHER', label: 'Other' },
 ]
 
 /** One row in the installment builder (UI uses calendar dates). */

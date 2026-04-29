@@ -59,7 +59,7 @@ export function CreateTemplatePage({
     mode: "onChange",
     defaultValues: {
       title: "",
-      feeType: "TUITION",
+      feeType: "ADMISSION",
       totalAmount: 0,
       isInstallment: false,
       installments: [],
