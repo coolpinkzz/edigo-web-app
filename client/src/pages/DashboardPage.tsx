@@ -3,10 +3,8 @@ import { AlertTriangle, CalendarDays, IndianRupee, Users } from "lucide-react";
 import { ClassPerformanceChart } from "../components/dashboard/ClassPerformanceChart";
 import { DashboardDateRangePicker } from "../components/dashboard/DashboardDateRangePicker";
 import { RevenueTrendChart } from "../components/dashboard/RevenueTrendChart";
-import { SettlementReconciliation } from "../components/dashboard/SettlementReconciliation";
 import { useDashboardClassPerformance } from "../hooks/useDashboardClassPerformance";
 import { useDashboardRevenueTrend } from "../hooks/useDashboardRevenueTrend";
-import { useDashboardSettlements } from "../hooks/useDashboardSettlements";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { useDashboardOverview } from "../hooks/useDashboardOverview";
 import { useOverdueFees } from "../hooks/useOverdueFees";
@@ -120,7 +118,6 @@ export function DashboardPage() {
     enabled: range.valid,
   });
   const classPerformance = useDashboardClassPerformance(range.valid);
-  const settlements = useDashboardSettlements({ page: 1, limit: 15 });
 
   const d = range.valid ? overview.data : undefined;
   const loadingMetrics = range.valid && overview.isLoading;
