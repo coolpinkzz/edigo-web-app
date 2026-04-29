@@ -1,4 +1,8 @@
 import { Request, Response } from "express";
+import {
+  BranchAccessError,
+  resolveBranchScopeFromRequest,
+} from "../../types/branch-scope";
 import * as studentService from "./student.service";
 import {
   ConfirmStudentImportBody,
@@ -92,6 +96,7 @@ export async function create(req: Request, res: Response): Promise<void> {
       parentEmail: student.parentEmail,
       panNumber: student.panNumber,
       dateOfBirth: student.dateOfBirth,
+      age: student.age,
       gender: student.gender,
       address: student.address,
       photoUrl: student.photoUrl,
@@ -103,6 +108,7 @@ export async function create(req: Request, res: Response): Promise<void> {
       joinedAt: student.joinedAt,
       leftAt: student.leftAt,
       tags: student.tags,
+      branchId: student.branchId,
       feeTemplateId: feeAssignment?.templateId ?? body.feeTemplateId,
       feeTemplateDiscountPercent: feeAssignment?.discount,
       assignmentAnchorDate:
@@ -137,7 +143,11 @@ export async function presignStudentPhoto(
     }
     const tenantId = req.user!.tenantId;
     const studentId = req.params.id;
-    const existing = await studentService.getStudentById(tenantId, studentId);
+    const existing = await studentService.getStudentById(
+      tenantId,
+      studentId,
+      req.user!,
+    );
     if (!existing) {
       res.status(404).json({ error: "Student not found" });
       return;
@@ -163,6 +173,17 @@ export async function list(req: Request, res: Response): Promise<void> {
   const q = req.query as unknown as ListStudentsQuery;
   const tenantId = req.user!.tenantId;
 
+  let branchScope;
+  try {
+    branchScope = resolveBranchScopeFromRequest(req.user!, q.branchId);
+  } catch (e) {
+    if (e instanceof BranchAccessError) {
+      res.status(403).json({ error: (e as Error).message });
+      return;
+    }
+    throw e;
+  }
+
   const result = await studentService.listStudents(tenantId, {
     page: q.page,
     limit: q.limit,
@@ -170,6 +191,7 @@ export async function list(req: Request, res: Response): Promise<void> {
     class: q.class,
     section: q.section,
     search: q.search,
+    branchScope,
   });
 
   res.json(result);
@@ -193,6 +215,17 @@ export async function feeOverview(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  let branchScope;
+  try {
+    branchScope = resolveBranchScopeFromRequest(req.user!, q.branchId);
+  } catch (e) {
+    if (e instanceof BranchAccessError) {
+      res.status(403).json({ error: (e as Error).message });
+      return;
+    }
+    throw e;
+  }
+
   const result = await listStudentFeeOverview(tenantId, {
     page: q.page,
     limit: q.limit,
@@ -204,6 +237,7 @@ export async function feeOverview(req: Request, res: Response): Promise<void> {
     feeTypes,
     sortBy: q.sortBy,
     sortDir: q.sortDir,
+    branchScope,
   });
   res.json(result);
 }
@@ -213,12 +247,24 @@ export async function feeOverview(req: Request, res: Response): Promise<void> {
  */
 export async function getById(req: Request, res: Response): Promise<void> {
   const tenantId = req.user!.tenantId;
-  const student = await studentService.getStudentById(tenantId, req.params.id);
-  if (!student) {
-    res.status(404).json({ error: "Student not found" });
-    return;
+  try {
+    const student = await studentService.getStudentById(
+      tenantId,
+      req.params.id,
+      req.user!,
+    );
+    if (!student) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+    res.json(student);
+  } catch (e) {
+    if (e instanceof BranchAccessError) {
+      res.status(403).json({ error: (e as Error).message });
+      return;
+    }
+    throw e;
   }
-  res.json(student);
 }
 
 /**
@@ -238,6 +284,7 @@ export async function update(req: Request, res: Response): Promise<void> {
     const existing = await studentService.getStudentById(
       tenantId,
       req.params.id,
+      req.user!,
     );
     if (!existing) {
       res.status(404).json({ error: "Student not found" });
@@ -283,6 +330,23 @@ export async function update(req: Request, res: Response): Promise<void> {
  */
 export async function remove(req: Request, res: Response): Promise<void> {
   const tenantId = req.user!.tenantId;
+  try {
+    const existing = await studentService.getStudentById(
+      tenantId,
+      req.params.id,
+      req.user!,
+    );
+    if (!existing) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+  } catch (e) {
+    if (e instanceof BranchAccessError) {
+      res.status(403).json({ error: (e as Error).message });
+      return;
+    }
+    throw e;
+  }
   const deleted = await studentService.deleteStudent(tenantId, req.params.id);
   if (!deleted) {
     res.status(404).json({ error: "Student not found" });

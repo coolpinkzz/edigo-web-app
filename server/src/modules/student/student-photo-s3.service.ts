@@ -106,3 +106,38 @@ export async function presignStudentPhotoPut(
     maxBytes: MAX_BYTES,
   };
 }
+
+/**
+ * Presigned PUT for tenant org logo: `tenants/{tenantId}/logo/{uuid}.{ext}`.
+ */
+export async function presignTenantLogoPut(
+  tenantId: string,
+  contentType: string,
+): Promise<PresignStudentPhotoResult> {
+  const ext = ALLOWED_TYPES.get(contentType);
+  if (!ext) {
+    throw new Error(
+      "Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+    );
+  }
+
+  const { region, bucket } = getBucketConfig();
+  const key = `tenants/${tenantId}/logo/${randomUUID()}.${ext}`;
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(getClient(region), command, {
+    expiresIn: PRESIGN_EXPIRES_SEC,
+  });
+
+  return {
+    uploadUrl,
+    publicUrl: buildPublicUrl(bucket, region, key),
+    expiresIn: PRESIGN_EXPIRES_SEC,
+    maxBytes: MAX_BYTES,
+  };
+}

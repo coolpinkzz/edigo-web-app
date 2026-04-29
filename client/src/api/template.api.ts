@@ -47,6 +47,18 @@ export async function createFeeTemplate(
   return data
 }
 
+/** PATCH /fee-templates/:templateId — same body shape as create. */
+export async function updateFeeTemplate(
+  templateId: string,
+  values: CreateFeeTemplateFormValues,
+): Promise<FeeTemplateDto> {
+  const { data } = await apiClient.patch<FeeTemplateDto>(
+    `/fee-templates/${templateId}`,
+    buildFeeTemplateBody(values),
+  )
+  return data
+}
+
 /** GET /fee-templates/:templateId */
 export async function getFeeTemplate(templateId: string): Promise<FeeTemplateDto> {
   const { data } = await apiClient.get<FeeTemplateDto>(

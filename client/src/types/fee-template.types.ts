@@ -1,11 +1,19 @@
 import type { StudentClass, StudentSection } from './student.types'
 
-export type FeeType = 'TUITION' | 'TRANSPORT' | 'HOSTEL' | 'OTHER'
+export type FeeType =
+  | 'TUITION'
+  | 'TRANSPORT'
+  | 'HOSTEL'
+  | 'ADMISSION'
+  | 'RENEW'
+  | 'OTHER'
 
 export const FEE_TYPE_OPTIONS: { value: FeeType; label: string }[] = [
   { value: 'TUITION', label: 'Tuition' },
   { value: 'TRANSPORT', label: 'Transport' },
   { value: 'HOSTEL', label: 'Hostel' },
+  { value: 'ADMISSION', label: 'New admission' },
+  { value: 'RENEW', label: 'Renew' },
   { value: 'OTHER', label: 'Other' },
 ]
 

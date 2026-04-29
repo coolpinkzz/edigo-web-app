@@ -54,7 +54,7 @@ export function AssignTemplatePage() {
   const template = templateQuery.data;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
       <div>
         <Link
           to="/fee-templates"
@@ -65,9 +65,6 @@ export function AssignTemplatePage() {
         <h1 className="mt-3 text-2xl font-semibold text-foreground">
           Assign fee structure
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Choose who should receive fees from this fee structure.
-        </p>
       </div>
 
       <FeeTemplateAssignPanel

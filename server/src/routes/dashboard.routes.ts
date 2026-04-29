@@ -24,6 +24,8 @@ router.use(authenticate);
  *       Collected = successful Razorpay payments (`Payment.status` SUCCESS, `updatedAt` in range) plus manual
  *       staff-recorded credits (`ManualPaymentCredit` by `recordedAt`). Amounts are INR (rupees).
  *       Pending = sum of `fee.pendingAmount` (current outstanding, not filtered by date).
+ *       Expected collectable = unpaid installment balances with `dueDate` in range plus lump-sum `pendingAmount`
+ *       for fees with `endDate` in range (`isInstallment` false).
  *       When `compare=true`, the previous window of equal duration ending at `from` is used for collected trend.
  *     security:
  *       - bearerAuth: []
@@ -45,7 +47,7 @@ router.use(authenticate);
  */
 router.get(
   "/overview",
-  requireRole(ROLES.VIEWER),
+  requireRole(ROLES.TENANT_ADMIN),
   validate({ query: dashboardOverviewQuerySchema }),
   (req, res) => {
     void dashboardController.overview(req, res);

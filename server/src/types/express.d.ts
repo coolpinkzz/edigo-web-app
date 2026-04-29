@@ -7,6 +7,11 @@ export interface JwtPayload {
   phone: string;
   /** Display name; omitted on tokens issued before this claim existed. */
   name?: string;
+  /**
+   * When set and non-empty, the user is restricted to these branch ids within the tenant.
+   * Omitted or empty => full tenant access (typical TENANT_ADMIN).
+   */
+  branchIds?: string[];
   iat?: number;
   exp?: number;
 }

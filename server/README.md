@@ -81,6 +81,8 @@ server/
 │   ├── utils/           # tenantSchema helper
 │   ├── app.ts
 │   └── index.ts
+├── docs/
+│   └── multi-branch.md  # Optional campuses per tenant (branches)
 ├── package.json
 ├── tsconfig.json
 └── .env.example

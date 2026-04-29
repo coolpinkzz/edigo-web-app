@@ -1,4 +1,9 @@
 import { Request, Response } from "express";
+import {
+  assertDocumentBranchAccess,
+  BranchAccessError,
+  resolveBranchScopeFromRequest,
+} from "../../types/branch-scope";
 import * as feeService from "./fee.service";
 import * as feeTemplateService from "../fee-template/fee-template.service";
 import {
@@ -87,12 +92,27 @@ export async function list(req: Request, res: Response): Promise<void> {
   const q = req.query as unknown as ListFeesQuery;
   const tenantId = req.user!.tenantId;
 
+  let branchScope;
+  try {
+    branchScope = resolveBranchScopeFromRequest(
+      req.user!,
+      q.branchId,
+    );
+  } catch (e) {
+    if (e instanceof BranchAccessError) {
+      res.status(403).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+
   const result = await feeService.listFees(tenantId, {
     page: q.page,
     limit: q.limit,
     studentId: q.studentId,
     status: q.status,
     feeType: q.feeType,
+    branchScope,
   });
 
   res.json(result);
@@ -102,6 +122,20 @@ export async function listOverdue(req: Request, res: Response): Promise<void> {
   const q = req.query as unknown as ListOverdueFeesQuery;
   const tenantId = req.user!.tenantId;
 
+  let branchScope;
+  try {
+    branchScope = resolveBranchScopeFromRequest(
+      req.user!,
+      q.branchId,
+    );
+  } catch (e) {
+    if (e instanceof BranchAccessError) {
+      res.status(403).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
+
   const result = await feeService.listOverdueFees(tenantId, {
     page: q.page,
     limit: q.limit,
@@ -109,6 +143,7 @@ export async function listOverdue(req: Request, res: Response): Promise<void> {
     class: q.class as feeService.ListOverdueFeesParams["class"],
     courseId: q.courseId,
     search: q.search,
+    branchScope,
   });
 
   res.json(result);
@@ -122,6 +157,15 @@ export async function getById(req: Request, res: Response): Promise<void> {
   if (!result) {
     res.status(404).json({ error: "Fee not found" });
     return;
+  }
+  try {
+    assertDocumentBranchAccess(req.user!, result.fee.branchId);
+  } catch (e) {
+    if (e instanceof BranchAccessError) {
+      res.status(403).json({ error: (e as Error).message });
+      return;
+    }
+    throw e;
   }
   res.json(result);
 }

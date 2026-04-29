@@ -43,6 +43,8 @@ export const COURSE_DURATION_MONTHS_MAX = 12;
 
 export interface IStudent extends Document {
   tenantId: string;
+  /** Optional campus; unset = legacy / single-site tenant behavior. */
+  branchId?: string;
 
   studentName: string;
   admissionId?: string;
@@ -56,6 +58,8 @@ export interface IStudent extends Document {
   panNumber?: string;
 
   dateOfBirth?: Date;
+  /** Optional; may differ from age implied by dateOfBirth. */
+  age?: number;
   gender?: StudentGender;
   /** Single-line mailing / contact address. */
   address?: string;
@@ -85,6 +89,7 @@ export interface IStudent extends Document {
 const StudentSchema = new Schema<IStudent>(
   {
     tenantId: { type: String, required: true, index: true },
+    branchId: { type: String, trim: true, index: true, sparse: true },
 
     studentName: { type: String, required: true, trim: true },
     admissionId: { type: String, trim: true },
@@ -98,6 +103,7 @@ const StudentSchema = new Schema<IStudent>(
     panNumber: { type: String, trim: true },
 
     dateOfBirth: { type: Date },
+    age: { type: Number },
     gender: { type: String, trim: true },
     address: { type: String, trim: true, maxlength: 500 },
 
@@ -136,6 +142,7 @@ const StudentSchema = new Schema<IStudent>(
 
 StudentSchema.index({ tenantId: 1, status: 1 });
 StudentSchema.index({ tenantId: 1, class: 1 });
+StudentSchema.index({ tenantId: 1, branchId: 1 });
 /** One non-empty scholarId per tenant (import + API rely on this). */
 StudentSchema.index(
   { tenantId: 1, scholarId: 1 },

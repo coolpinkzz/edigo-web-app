@@ -8,8 +8,10 @@ import { MainLayout } from "../layouts/MainLayout";
 import { AssignTemplatePage } from "../pages/AssignTemplatePage";
 import { AttendancePage } from "../pages/AttendancePage";
 import { AttendanceDashboardPage } from "../pages/AttendanceDashboardPage";
+import { BranchesPage } from "../pages/BranchesPage";
 import { CoursesListPage } from "../pages/CoursesListPage";
 import { CreateTemplatePage } from "../pages/CreateTemplatePage";
+import { EditTemplatePage } from "../pages/EditTemplatePage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { FeeOverviewPage } from "../pages/FeeOverviewPage";
 import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
@@ -22,15 +24,20 @@ import { OverduePage } from "../pages/OverduePage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { TeamManagementPage } from "../pages/TeamManagementPage";
 import { TemplatesListPage } from "../pages/TemplatesListPage";
+import { QuotationsListPage } from "../pages/QuotationsListPage";
+import { QuotationFormPage } from "../pages/QuotationFormPage";
+import { QuotationDetailPage } from "../pages/QuotationDetailPage";
 import { PaymentAlreadyPaidPage } from "../pages/PaymentAlreadyPaidPage";
 import { PaymentSuccessPage } from "../pages/PaymentSuccessPage";
 import { LandingPage } from "../pages/LandingPage";
+import { OnboardingPage } from "../pages/OnboardingPage";
 
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route
         path="/payment-already-paid"
@@ -49,6 +56,38 @@ export function AppRoutes() {
               <StaffRedirectRoute>
                 <DashboardPage />
               </StaffRedirectRoute>
+            }
+          />
+          <Route
+            path="quotations"
+            element={
+              <FeeAdminRoute>
+                <QuotationsListPage />
+              </FeeAdminRoute>
+            }
+          />
+          <Route
+            path="quotations/new"
+            element={
+              <FeeAdminRoute>
+                <QuotationFormPage />
+              </FeeAdminRoute>
+            }
+          />
+          <Route
+            path="quotations/:quotationId"
+            element={
+              <FeeAdminRoute>
+                <QuotationDetailPage />
+              </FeeAdminRoute>
+            }
+          />
+          <Route
+            path="quotations/:quotationId/edit"
+            element={
+              <FeeAdminRoute>
+                <QuotationFormPage />
+              </FeeAdminRoute>
             }
           />
           <Route
@@ -77,6 +116,14 @@ export function AppRoutes() {
             element={
               <AdminOnlyRoute>
                 <TeamManagementPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="branches"
+            element={
+              <AdminOnlyRoute>
+                <BranchesPage />
               </AdminOnlyRoute>
             }
           />
@@ -151,6 +198,14 @@ export function AppRoutes() {
             element={
               <FeeAdminRoute>
                 <CreateTemplatePage />
+              </FeeAdminRoute>
+            }
+          />
+          <Route
+            path="fee-templates/:templateId/edit"
+            element={
+              <FeeAdminRoute>
+                <EditTemplatePage />
               </FeeAdminRoute>
             }
           />

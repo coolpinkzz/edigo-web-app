@@ -10,8 +10,10 @@ import { Student } from "../student/student.model";
 import { IPayment, Payment, PaymentStatus } from "./payment.model";
 import type { CreateOrderBody } from "./payment.validation";
 import { ReminderToken } from "../reminder/reminder-token.model";
+import { Quotation } from "../quotation/quotation.model";
 import { Tenant } from "../auth/tenant.model";
 import { ensureInvoiceForPayment } from "../invoice/invoice.service";
+import { markQuotationAcceptedAfterPayment } from "../quotation/quotation-accept.service";
 import { DAY_MS, startOfBusinessDay } from "../../config/timezone";
 
 const SCOPE = "payment.service";
@@ -248,7 +250,7 @@ export async function createOrder(
   tenantId: string,
   body: CreateOrderBody,
   idempotencyKey: string,
-  options?: { payToken?: string },
+  options?: { payToken?: string; quotationId?: string },
 ): Promise<CreateOrderResult> {
   assertRazorpayConfigured();
 
@@ -355,6 +357,9 @@ export async function createOrder(
         studentId: body.studentId,
         feeId: body.feeId,
         installmentId: installmentId ?? "",
+        ...(options?.quotationId
+          ? { quotationId: options.quotationId }
+          : {}),
       },
       ...(routeTransfers ?? {}),
     })) as typeof order;
@@ -370,6 +375,7 @@ export async function createOrder(
       tenantId,
       studentId: body.studentId,
       feeId: body.feeId,
+      ...(fee.branchId ? { branchId: fee.branchId } : {}),
       ...(installmentId ? { installmentId } : {}),
       amount: amountPaise,
       principalAmount: principalAmountPaise,
@@ -381,6 +387,7 @@ export async function createOrder(
       idempotencyKey,
       idempotencyPayloadHash: payloadHash,
       ...(options?.payToken ? { payToken: options.payToken } : {}),
+      ...(options?.quotationId ? { quotationId: options.quotationId } : {}),
     });
 
     logger.info(SCOPE, "payment order created", {
@@ -544,6 +551,9 @@ async function refreshStaleInitiatedPaymentForPayToken(
         studentId: body.studentId,
         feeId: body.feeId,
         installmentId: resolvedInst ?? "",
+        ...(paymentDoc.quotationId
+          ? { quotationId: paymentDoc.quotationId }
+          : {}),
       },
       ...(routeTransfers ?? {}),
     })) as typeof order;
@@ -577,6 +587,28 @@ async function refreshStaleInitiatedPaymentForPayToken(
     student?.studentName ?? "Student",
     fee.title,
   );
+}
+
+/**
+ * When a pay link is re-opened after the fee is settled, we still have `payToken`
+ * on the successful Payment. Used to send users to the invoice page instead of
+ * a generic "already paid" screen.
+ */
+export async function findLatestSuccessfulPaymentIdForPayToken(
+  payToken: string,
+): Promise<string | null> {
+  const t = payToken.trim();
+  if (!t) {
+    return null;
+  }
+  const p = await Payment.findOne(
+    { payToken: t, status: "SUCCESS" },
+    { _id: 1 },
+  )
+    .sort({ updatedAt: -1 })
+    .lean()
+    .exec();
+  return p?._id != null ? String(p._id) : null;
 }
 
 /**
@@ -728,9 +760,20 @@ export async function createOrderForPayToken(
   const idempotencyKey =
     priorCount === 0 ? `pay-${trimmed}` : `pay-${trimmed}-r${priorCount}`;
 
+  const linkedQuotation = await Quotation.findOne({
+    checkoutPayToken: trimmed,
+  })
+    .select("_id")
+    .lean()
+    .exec();
+  const quotationIdFromCheckout = linkedQuotation?._id.toString();
+
   try {
     const result = await createOrder(tokenDoc.tenantId, body, idempotencyKey, {
       payToken: trimmed,
+      ...(quotationIdFromCheckout
+        ? { quotationId: quotationIdFromCheckout }
+        : {}),
     });
     logger.info(SCOPE, "pay token order created", {
       paymentId: result.payment.id,
@@ -1125,6 +1168,18 @@ export async function processWebhook(
         }),
       );
 
+      void markQuotationAcceptedAfterPayment({
+        quotationId: fresh.quotationId,
+        studentId: fresh.studentId,
+        feeId: fresh.feeId,
+        status: "SUCCESS",
+      }).catch((qErr) =>
+        logger.error(SCOPE, "quotation mark ACCEPTED after link failed", {
+          paymentId: fresh._id.toString(),
+          error: qErr instanceof Error ? qErr.message : String(qErr),
+        }),
+      );
+
       return { ok: true };
     } catch (err) {
       await session.abortTransaction();
@@ -1238,6 +1293,18 @@ export async function processWebhook(
         logger.error(SCOPE, "invoice after payment.captured failed", {
           paymentId: fresh._id.toString(),
           error: invErr instanceof Error ? invErr.message : String(invErr),
+        }),
+      );
+
+      void markQuotationAcceptedAfterPayment({
+        quotationId: fresh.quotationId,
+        studentId: fresh.studentId,
+        feeId: fresh.feeId,
+        status: "SUCCESS",
+      }).catch((qErr) =>
+        logger.error(SCOPE, "quotation mark ACCEPTED after capture failed", {
+          paymentId: fresh._id.toString(),
+          error: qErr instanceof Error ? qErr.message : String(qErr),
         }),
       );
 

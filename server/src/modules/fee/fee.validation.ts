@@ -148,6 +148,12 @@ const listFeesQuerySchema = Joi.object({
   studentId: Joi.string().hex().length(24).optional().allow("", null).empty([null, ""]),
   status: feeStatusField.optional().allow("", null).empty([null, ""]),
   feeType: feeTypeField.optional().allow("", null).empty([null, ""]),
+  branchId: Joi.string()
+    .hex()
+    .length(24)
+    .optional()
+    .allow("", null)
+    .empty([null, ""]),
 }).unknown(false);
 
 const studentClassField = Joi.string()
@@ -175,6 +181,12 @@ const listOverdueFeesQuerySchema = Joi.object({
     .allow("", null)
     .empty([null, ""]),
   search: Joi.string().trim().max(200).optional().allow("", null).empty([null, ""]),
+  branchId: Joi.string()
+    .hex()
+    .length(24)
+    .optional()
+    .allow("", null)
+    .empty([null, ""]),
 }).unknown(false);
 
 const assignCustomInstallmentSchema = Joi.object({
@@ -315,6 +327,7 @@ export interface ListFeesQuery {
   studentId?: string;
   status?: FeeStatus;
   feeType?: FeeType;
+  branchId?: string;
 }
 
 export interface ListOverdueFeesQuery {
@@ -324,6 +337,7 @@ export interface ListOverdueFeesQuery {
   class?: string;
   courseId?: string;
   search?: string;
+  branchId?: string;
 }
 
 export interface AssignTemplateToStudentsBody {

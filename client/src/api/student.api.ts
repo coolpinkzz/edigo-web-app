@@ -106,6 +106,7 @@ export function studentToFormValues(s: StudentDto): CreateStudentFormValues {
     scholarId: s.scholarId ?? "",
     panNumber: s.panNumber ?? "",
     dateOfBirth: s.dateOfBirth ? String(s.dateOfBirth).slice(0, 10) : "",
+    age: s.age != null ? String(s.age) : "",
     gender: (s.gender as StudentGender | undefined) ?? "",
     address: s.address ?? "",
     class: s.class ?? "1st",
@@ -117,9 +118,10 @@ export function studentToFormValues(s: StudentDto): CreateStudentFormValues {
     feeTemplateDiscountPercent: "",
     assignmentAnchorDate: "",
     feeEndDate: "",
-    useCustomInstallments: false,
-    customInstallments: [],
-    photoUrl: s.photoUrl ?? "",
+  useCustomInstallments: false,
+  customInstallments: [],
+  branchId: s.branchId ?? "",
+  photoUrl: s.photoUrl ?? "",
   };
 }
 
@@ -132,6 +134,8 @@ export function buildStudentJsonBody(
     feeTemplateIsInstallment?: boolean;
     /** PATCH: send null for cleared optional profile fields. */
     forPatch?: boolean;
+    /** When true, `branchId` is sent (or null on PATCH when cleared). Omit entirely when the tenant has no branches. */
+    includeBranchInApiPayload?: boolean;
   },
 ): Record<string, unknown> {
   const parentPhoneNumber = normalizeTenDigitPhone(values.parentPhoneNumber);
@@ -154,13 +158,28 @@ export function buildStudentJsonBody(
   const dobRaw = trimOrEmpty(values.dateOfBirth ?? "");
   const genderRaw = trimOrEmpty(values.gender ?? "");
   const addrRaw = trimOrEmpty(values.address ?? "");
+  const ageRaw = trimOrEmpty(values.age ?? "");
   if (forPatch) {
     studentBody.dateOfBirth = dobRaw === "" ? null : dobRaw;
+    if (ageRaw === "") {
+      studentBody.age = null;
+    } else {
+      const ageNum = Number(ageRaw);
+      if (Number.isFinite(ageNum)) {
+        studentBody.age = ageNum;
+      }
+    }
     studentBody.gender = genderRaw === "" ? null : genderRaw;
     studentBody.address = addrRaw === "" ? null : addrRaw;
     studentBody.alternatePhone = altDigits === "" ? null : altDigits;
   } else {
     if (dobRaw !== "") studentBody.dateOfBirth = dobRaw;
+    if (ageRaw !== "") {
+      const ageNum = Number(ageRaw);
+      if (Number.isFinite(ageNum)) {
+        studentBody.age = ageNum;
+      }
+    }
     if (genderRaw !== "") studentBody.gender = genderRaw;
     if (addrRaw !== "") studentBody.address = addrRaw;
     if (altDigits !== "") studentBody.alternatePhone = altDigits;
@@ -171,6 +190,15 @@ export function buildStudentJsonBody(
     studentBody.photoUrl = photoRaw === "" ? null : photoRaw;
   } else if (photoRaw !== "") {
     studentBody.photoUrl = photoRaw;
+  }
+
+  if (options?.includeBranchInApiPayload === true) {
+    const branchRaw = trimOrEmpty(values.branchId ?? "");
+    if (forPatch) {
+      studentBody.branchId = branchRaw === "" ? null : branchRaw;
+    } else if (branchRaw !== "") {
+      studentBody.branchId = branchRaw;
+    }
   }
 
   if (tenantType === "SCHOOL") {
@@ -304,13 +332,17 @@ export async function getStudent(studentId: string): Promise<StudentDto> {
 export async function createStudent(
   values: CreateStudentFormValues,
   tenantType: TenantType,
-  options?: { feeTemplateIsInstallment?: boolean },
+  options?: {
+    feeTemplateIsInstallment?: boolean;
+    includeBranchInApiPayload?: boolean;
+  },
 ): Promise<StudentDto> {
   const { data } = await apiClient.post<StudentDto>(
     "/students/create",
     buildStudentJsonBody(values, tenantType, {
       includeFeeAssignment: true,
       feeTemplateIsInstallment: options?.feeTemplateIsInstallment,
+      includeBranchInApiPayload: options?.includeBranchInApiPayload,
     }),
   );
   return data;
@@ -320,10 +352,14 @@ export async function updateStudent(
   studentId: string,
   values: CreateStudentFormValues,
   tenantType: TenantType,
+  options?: { includeBranchInApiPayload?: boolean },
 ): Promise<StudentDto> {
   const { data } = await apiClient.patch<StudentDto>(
     `/students/${studentId}`,
-    buildStudentJsonBody(values, tenantType, { forPatch: true }),
+    buildStudentJsonBody(values, tenantType, {
+      forPatch: true,
+      includeBranchInApiPayload: options?.includeBranchInApiPayload,
+    }),
   );
   return data;
 }

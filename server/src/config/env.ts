@@ -49,6 +49,25 @@ export const env = {
   smtpPass: process.env.SMTP_PASS ?? "",
   /** From header; defaults to SMTP_USER if unset. */
   smtpFrom: process.env.SMTP_FROM ?? "",
+  /**
+   * When false, POST/PATCH/DELETE on `/branches` return 403 (list/get still work).
+   * Signup may still store `branches` for forward compatibility. Default: enabled.
+   */
+  multiBranchEnabled: process.env.MULTI_BRANCH_ENABLED !== "false",
+  /**
+   * Directory for stored quotation PDFs (absolute or relative to cwd).
+   * Default: uploads/quotations
+   */
+  quotationPdfDir: process.env.QUOTATION_PDF_DIR ?? "",
+  quotationPdfTokenTtlDays: (() => {
+    const n = parseInt(process.env.QUOTATION_PDF_TOKEN_TTL_DAYS ?? "30", 10);
+    return Number.isFinite(n) && n >= 1 ? n : 30;
+  })(),
+  /**
+   * When set, `POST /auth/signup` requires header `X-Signup-Key` to match.
+   * Leave empty only if open tenant creation is acceptable (e.g. local dev).
+   */
+  signupApiKey: process.env.SIGNUP_API_KEY ?? "",
 } as const;
 
 export function isDemoEmailConfigured(): boolean {

@@ -61,14 +61,16 @@ export function addDaysToISODate(iso: string, days: number): string {
 
 /**
  * Inverse of `buildDefaultInstallments`: maps API `dueInDays` rows to calendar dates for the form.
- * Uses today as day 0 so relative spacing matches what the server stores.
+ * `anchorISO` is the template’s `installmentAnchorDate` (earliest due, day 0). If omitted, uses today so relative spacing still matches stored `dueInDays`.
  */
 export function defaultInstallmentsToFormRows(
   rows: { amount: number; dueInDays: number; lateFee?: number }[],
+  anchorISO?: string,
 ): { amount: number; dueDate: string; lateFee: number }[] {
   if (rows.length === 0) return []
   const sorted = [...rows].sort((a, b) => a.dueInDays - b.dueInDays)
-  const base = todayISODate()
+  const trimmed = anchorISO?.trim()
+  const base = trimmed && trimmed.length > 0 ? trimmed : todayISODate()
   return sorted.map((row) => ({
     amount: row.amount,
     dueDate: addDaysToISODate(base, row.dueInDays),

@@ -23,8 +23,59 @@ const DAILY_PENALTY_CAP_RATIO = 0.25;
  * Synthetic `ReminderToken.installmentId` / `ReminderLog.installmentId` for lump-sum fees
  * (unique per fee; not a Mongo ObjectId — pay flow resolves by fee installments count).
  */
-function lumpReminderKey(feeId: string): string {
+export function lumpReminderKey(feeId: string): string {
   return `lump:${feeId}`;
+}
+
+const PAY_SHORT_CODE_BYTES = 5;
+
+function generatePayShortCode(): string {
+  return crypto
+    .randomBytes(PAY_SHORT_CODE_BYTES)
+    .toString("base64url")
+    .replace(/=+$/, "");
+}
+
+async function ensureUniqueShortCode(): Promise<string> {
+  for (let i = 0; i < 8; i += 1) {
+    const code = generatePayShortCode();
+    const clash = await ReminderToken.findOne({ shortCode: code })
+      .select("_id")
+      .lean()
+      .exec();
+    if (!clash) {
+      return code;
+    }
+  }
+  throw new Error("Could not allocate pay short code");
+}
+
+/**
+ * Resolves a pay URL path segment to the long opaque `token` (full hex or `shortCode`).
+ * Used for `GET /pay/:...` and `GET /p/:...`.
+ */
+export async function resolvePayTokenFromRequestParam(
+  param: string,
+): Promise<string | null> {
+  const trimmed = param.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const byToken = await ReminderToken.findOne({ token: trimmed })
+    .select("token")
+    .lean()
+    .exec();
+  if (byToken) {
+    return byToken.token;
+  }
+  const byShort = await ReminderToken.findOne({ shortCode: trimmed })
+    .select("token")
+    .lean()
+    .exec();
+  if (byShort) {
+    return byShort.token;
+  }
+  return null;
 }
 
 /** Increments access stats when a parent opens the pay link (idempotent per request). */
@@ -40,6 +91,56 @@ export async function recordPayLinkAccess(token: string): Promise<void> {
 const REMINDER_WINDOW_DAYS = 3;
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Creates or refreshes a ReminderToken for `GET /pay/:token` (installment id or `lump:${feeId}`).
+ * Export for quotation checkout and other flows that need a longer TTL than reminder SMS.
+ */
+export async function ensurePayTokenForTarget(input: {
+  installmentId: string;
+  feeId: string;
+  studentId: string;
+  tenantId: string;
+  /** Defaults to reminder window (7d). */
+  ttlMs?: number;
+}): Promise<{ token: string; shortCode: string; expiresAt: Date }> {
+  const ttlMs = input.ttlMs ?? TOKEN_TTL_MS;
+  const expiresAt = new Date(Date.now() + ttlMs);
+
+  const existing = await ReminderToken.findOne({
+    installmentId: input.installmentId,
+  }).exec();
+
+  if (existing) {
+    existing.expiresAt = expiresAt;
+    existing.feeId = input.feeId;
+    existing.studentId = input.studentId;
+    existing.tenantId = input.tenantId;
+    if (!existing.shortCode) {
+      existing.shortCode = await ensureUniqueShortCode();
+    }
+    await existing.save();
+    return {
+      token: existing.token,
+      shortCode: existing.shortCode!,
+      expiresAt,
+    };
+  }
+
+  const token = crypto.randomBytes(24).toString("hex");
+  const shortCode = await ensureUniqueShortCode();
+  await ReminderToken.create({
+    token,
+    shortCode,
+    installmentId: input.installmentId,
+    feeId: input.feeId,
+    studentId: input.studentId,
+    tenantId: input.tenantId,
+    expiresAt,
+    accessCount: 0,
+  });
+  return { token, shortCode, expiresAt };
+}
+
 function endOfReminderWindowIst(now: Date): Date {
   const start = startOfBusinessDay(now);
   const end = new Date(start.getTime() + (REMINDER_WINDOW_DAYS + 1) * DAY_MS - 1);
@@ -54,33 +155,9 @@ async function upsertReminderToken(input: {
   feeId: string;
   studentId: string;
   tenantId: string;
-}): Promise<{ token: string }> {
-  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
-
-  const existing = await ReminderToken.findOne({
-    installmentId: input.installmentId,
-  }).exec();
-
-  if (existing) {
-    existing.expiresAt = expiresAt;
-    existing.feeId = input.feeId;
-    existing.studentId = input.studentId;
-    existing.tenantId = input.tenantId;
-    await existing.save();
-    return { token: existing.token };
-  }
-
-  const token = crypto.randomBytes(24).toString("hex");
-  await ReminderToken.create({
-    token,
-    installmentId: input.installmentId,
-    feeId: input.feeId,
-    studentId: input.studentId,
-    tenantId: input.tenantId,
-    expiresAt,
-    accessCount: 0,
-  });
-  return { token };
+}): Promise<{ token: string; shortCode: string }> {
+  const r = await ensurePayTokenForTarget({ ...input, ttlMs: TOKEN_TTL_MS });
+  return { token: r.token, shortCode: r.shortCode };
 }
 
 function computeInstallmentReminderCollectRupees(
@@ -271,14 +348,14 @@ export async function runInstallmentReminders(
         continue;
       }
 
-      const { token } = await upsertReminderToken({
+      const { token, shortCode } = await upsertReminderToken({
         installmentId: inst._id.toString(),
         feeId: fee._id.toString(),
         studentId: fee.studentId,
         tenantId: fee.tenantId,
       });
 
-      const payUrl = `${env.publicAppUrl}/pay/${token}`;
+      const payUrl = `${env.publicAppUrl}/p/${shortCode}`;
       const dueStr = businessDayKey(new Date(inst.dueDate));
       const message = `Fee reminder: ${fee.title} for ${student.studentName}. Due ${dueStr}. Pending approx ₹${totalCollectRupees.toFixed(2)}. Pay: ${payUrl}`;
 
@@ -391,14 +468,14 @@ export async function runInstallmentReminders(
         continue;
       }
 
-      const { token } = await upsertReminderToken({
+      const { token, shortCode } = await upsertReminderToken({
         installmentId: lumpKey,
         feeId: fee._id.toString(),
         studentId: fee.studentId,
         tenantId: fee.tenantId,
       });
 
-      const payUrl = `${env.publicAppUrl}/pay/${token}`;
+      const payUrl = `${env.publicAppUrl}/p/${shortCode}`;
       const dueStr = businessDayKey(new Date(fee.endDate!));
       const message = `Fee reminder: ${fee.title} for ${student.studentName}. Due ${dueStr}. Pending approx ₹${collectRupees.toFixed(2)}. Pay: ${payUrl}`;
 
@@ -562,14 +639,14 @@ export async function sendInstallmentReminderForTenant(
     };
   }
 
-  const { token } = await upsertReminderToken({
+  const { token, shortCode } = await upsertReminderToken({
     installmentId: inst._id.toString(),
     feeId: fee._id.toString(),
     studentId: fee.studentId,
     tenantId: fee.tenantId,
   });
 
-  const payUrl = `${env.publicAppUrl}/pay/${token}`;
+  const payUrl = `${env.publicAppUrl}/p/${shortCode}`;
   const dueStr = businessDayKey(new Date(inst.dueDate));
   const message = `Fee reminder: ${fee.title} for ${student.studentName}. Due ${dueStr}. Pending approx ₹${totalCollectRupees.toFixed(2)}. Pay: ${payUrl}`;
 
@@ -729,14 +806,14 @@ export async function sendFeeReminderForTenant(
     };
   }
 
-  const { token } = await upsertReminderToken({
+  const { token, shortCode } = await upsertReminderToken({
     installmentId: lumpKey,
     feeId: fee._id.toString(),
     studentId: fee.studentId,
     tenantId: fee.tenantId,
   });
 
-  const payUrl = `${env.publicAppUrl}/pay/${token}`;
+  const payUrl = `${env.publicAppUrl}/p/${shortCode}`;
   const dueStr = fee.endDate
     ? businessDayKey(new Date(fee.endDate))
     : "—";

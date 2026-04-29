@@ -21,7 +21,9 @@ export const signupRateLimit = rateLimit({
   ...commonOptions,
   windowMs: 15 * 60 * 1000,
   max: 10,
-  handler: rateLimitHandler("Too many signup attempts. Please try again later."),
+  handler: rateLimitHandler(
+    "Too many signup attempts. Please try again later.",
+  ),
 });
 
 /** Stricter cap for credential checks. */
@@ -37,7 +39,9 @@ export const inviteRateLimit = rateLimit({
   ...commonOptions,
   windowMs: 10 * 60 * 1000,
   max: 30,
-  handler: rateLimitHandler("Too many invite attempts. Please try again later."),
+  handler: rateLimitHandler(
+    "Too many invite attempts. Please try again later.",
+  ),
 });
 
 /** Webhook endpoint should absorb retries but still cap flood abuse. */
@@ -53,7 +57,9 @@ export const payLinkRateLimit = rateLimit({
   ...commonOptions,
   windowMs: 15 * 60 * 1000,
   max: 60,
-  handler: rateLimitHandler("Too many payment link requests. Please try again later."),
+  handler: rateLimitHandler(
+    "Too many payment link requests. Please try again later.",
+  ),
 });
 
 /** Forgot password: OTP SMS abuse. */
@@ -71,7 +77,9 @@ export const passwordResetOtpVerifyRateLimit = rateLimit({
   ...commonOptions,
   windowMs: 15 * 60 * 1000,
   max: 30,
-  handler: rateLimitHandler("Too many verification attempts. Please try again later."),
+  handler: rateLimitHandler(
+    "Too many verification attempts. Please try again later.",
+  ),
 });
 
 export const passwordResetSubmitRateLimit = rateLimit({
@@ -89,4 +97,30 @@ export const demoRequestRateLimit = rateLimit({
   handler: rateLimitHandler(
     "Too many demo requests from this address. Please try again later.",
   ),
+});
+
+/** Public quotation PDF via SMS token — slow probing. */
+export const quotationPdfPublicRateLimit = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  handler: rateLimitHandler(
+    "Too many quotation PDF requests. Please try again later.",
+  ),
+});
+
+/** Staff: generate PDF + SMS per quotation — cap abuse. */
+export const quotationSendSmsRateLimit = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  handler: rateLimitHandler("Too many send attempts. Please try again later."),
+});
+
+/** Public quotation accept + checkout page. */
+export const quotationAcceptRateLimit = rateLimit({
+  ...commonOptions,
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  handler: rateLimitHandler("Too many requests. Please try again later."),
 });

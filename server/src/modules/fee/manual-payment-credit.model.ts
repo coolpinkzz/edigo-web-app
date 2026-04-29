@@ -6,6 +6,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
  */
 export interface IManualPaymentCredit extends Document {
   tenantId: string;
+  branchId?: string;
   feeId: string;
   studentId: string;
   installmentId?: string;
@@ -20,6 +21,7 @@ export interface IManualPaymentCredit extends Document {
 const ManualPaymentCreditSchema = new Schema<IManualPaymentCredit>(
   {
     tenantId: { type: String, required: true, index: true },
+    branchId: { type: String, trim: true, index: true, sparse: true },
     feeId: { type: String, required: true, index: true },
     studentId: { type: String, required: true, index: true },
     installmentId: { type: String, trim: true, index: true, sparse: true },

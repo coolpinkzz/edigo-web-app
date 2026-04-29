@@ -1,14 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery } from "@tanstack/react-query";
 import {
   getDashboardOverview,
   type DashboardOverviewParams,
-} from '../api/dashboard.api'
-import { dashboardOverviewQueryKey } from '../constants/query-keys'
+} from "../api/dashboard.api";
+import { dashboardOverviewQueryKey } from "../constants/query-keys";
 
 export function useDashboardOverview(
   params: DashboardOverviewParams & { enabled?: boolean },
 ) {
-  const { enabled = true, ...overviewParams } = params
+  const { enabled = true, ...overviewParams } = params;
   return useQuery({
     queryKey: [
       ...dashboardOverviewQueryKey,
@@ -18,5 +18,5 @@ export function useDashboardOverview(
     ] as const,
     queryFn: () => getDashboardOverview(overviewParams),
     enabled,
-  })
+  });
 }

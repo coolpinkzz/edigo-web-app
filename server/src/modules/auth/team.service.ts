@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { assertBranchIdsForTenant } from "./auth.service";
 import { User, IUser } from "./user.model";
 import { ROLES, Role } from "../../types/roles";
 
@@ -14,12 +15,14 @@ export type TeamMemberPublic = {
   name: string;
   role: Role;
   isActive: boolean;
+  /** When set, member only sees these branches. */
+  branchIds?: string[];
   createdAt: Date;
   updatedAt: Date;
 };
 
 function serialize(u: IUser): TeamMemberPublic {
-  return {
+  const row: TeamMemberPublic = {
     id: u._id.toString(),
     phone: u.phone,
     name: u.name,
@@ -28,6 +31,13 @@ function serialize(u: IUser): TeamMemberPublic {
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
   };
+  const b = u.branchIds?.filter(
+    (id) => typeof id === "string" && id.length === 24,
+  );
+  if (b?.length) {
+    row.branchIds = b;
+  }
+  return row;
 }
 
 export async function listTeamMembers(
@@ -57,6 +67,8 @@ async function countActiveTenantAdmins(
 export type UpdateTeamMemberInput = {
   role?: Role;
   isActive?: boolean;
+  /** Replace branch scope; omit to leave unchanged. */
+  branchIds?: string[] | null;
 };
 
 /**
@@ -105,6 +117,22 @@ export async function updateTeamMember(
 
   if (input.role !== undefined) target.role = input.role;
   if (input.isActive !== undefined) target.isActive = input.isActive;
+
+  if (input.branchIds !== undefined) {
+    if (input.branchIds === null) {
+      target.set("branchIds", undefined);
+    } else if (Array.isArray(input.branchIds) && input.branchIds.length === 0) {
+      target.set("branchIds", undefined);
+    } else if (Array.isArray(input.branchIds)) {
+      const validated = await assertBranchIdsForTenant(
+        tenantId,
+        input.branchIds,
+      );
+      target.branchIds = validated?.length ? validated : undefined;
+    } else {
+      throw new Error("branchIds must be an array, null, or omitted");
+    }
+  }
 
   await target.save();
   return serialize(target);

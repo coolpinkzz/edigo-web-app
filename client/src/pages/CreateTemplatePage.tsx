@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FeeTemplateAssignPanel } from "../components/fees/FeeTemplateAssignPanel";
 import {
   Button,
@@ -15,14 +15,30 @@ import type { CreateFeeTemplateFormValues, FeeTemplateDto } from "../types";
 import { splitEqualAmounts, todayISODate } from "../utils/installments";
 import { cn } from "../utils/cn";
 import { useCreateTemplate } from "../hooks/useCreateTemplate";
+import { useFeeTemplate } from "../hooks/useFeeTemplate";
+import { useUpdateFeeTemplate } from "../hooks/useUpdateFeeTemplate";
+import { feeTemplateDtoToFormValues } from "../utils/fee-template-form";
 import { getErrorMessage } from "../utils";
 
+export type CreateTemplatePageProps = {
+  mode?: "create" | "edit";
+  /** Required when `mode` is `"edit"`. */
+  templateId?: string;
+};
+
 /**
- * Create fee structure (`/fee-templates/new`).
+ * Create fee structure (`/fee-templates/new`) or edit (`/fee-templates/:id/edit`).
  * Installment rows use calendar dates; API layer converts to `dueInDays` for the server.
  */
-export function CreateTemplatePage() {
+export function CreateTemplatePage({
+  mode = "create",
+  templateId: editTemplateId,
+}: CreateTemplatePageProps = {}) {
+  const navigate = useNavigate();
+  const isEdit = mode === "edit";
   const createMutation = useCreateTemplate();
+  const updateMutation = useUpdateFeeTemplate();
+  const templateQuery = useFeeTemplate(isEdit ? editTemplateId : undefined);
   const [generateCount, setGenerateCount] = useState(2);
   const [createdTemplate, setCreatedTemplate] = useState<FeeTemplateDto | null>(
     null,
@@ -33,6 +49,7 @@ export function CreateTemplatePage() {
     control,
     register,
     handleSubmit,
+    reset,
     setError,
     clearErrors,
     getValues,
@@ -67,6 +84,11 @@ export function CreateTemplatePage() {
       block: "start",
     });
   }, [createdTemplate]);
+
+  useEffect(() => {
+    if (!isEdit || !templateQuery.data) return;
+    reset(feeTemplateDtoToFormValues(templateQuery.data));
+  }, [isEdit, templateQuery.data, reset]);
 
   /** When installments are enabled, seed two equal rows (or zeros) if the list is empty. */
   useEffect(() => {
@@ -107,12 +129,16 @@ export function CreateTemplatePage() {
           r.dueDate.length > 0,
       ));
 
+  const savePending = isEdit
+    ? updateMutation.isPending
+    : createMutation.isPending;
+
   const canSubmit =
     Boolean(titleValue?.trim()) &&
     totalNum > 0 &&
     rowsComplete &&
     sumMatches &&
-    !createMutation.isPending;
+    !savePending;
 
   const handleGenerateInstallments = () => {
     const total = Number(getValues("totalAmount"));
@@ -140,6 +166,15 @@ export function CreateTemplatePage() {
       }
     }
     try {
+      if (isEdit) {
+        if (!editTemplateId) return;
+        await updateMutation.mutateAsync({
+          templateId: editTemplateId,
+          values: data,
+        });
+        navigate("/fee-templates?updated=1");
+        return;
+      }
       const created = await createMutation.mutateAsync(data);
       setCreatedTemplate(created);
     } catch {
@@ -148,9 +183,49 @@ export function CreateTemplatePage() {
   };
 
   const errorMessage =
-    createMutation.isError && createMutation.error
-      ? getErrorMessage(createMutation.error)
+    (isEdit ? updateMutation.isError : createMutation.isError)
+      ? getErrorMessage(isEdit ? updateMutation.error : createMutation.error)
       : null;
+
+  if (isEdit) {
+    if (!editTemplateId) {
+      return (
+        <div className="mx-auto max-w-4xl px-4 py-10">
+          <p className="text-sm text-red-600" role="alert">
+            Missing fee structure id.
+          </p>
+          <Link
+            to="/fee-templates"
+            className="mt-2 inline-block text-sm text-primary hover:underline"
+          >
+            Back to fee structures
+          </Link>
+        </div>
+      );
+    }
+    if (templateQuery.isLoading) {
+      return (
+        <div className="mx-auto max-w-4xl px-4 py-10">
+          <p className="text-sm text-muted-foreground">Loading structure…</p>
+        </div>
+      );
+    }
+    if (templateQuery.isError || !templateQuery.data) {
+      return (
+        <div className="mx-auto max-w-4xl px-4 py-10">
+          <p className="text-sm text-red-600" role="alert">
+            Could not load this fee structure.
+          </p>
+          <Link
+            to="/fee-templates"
+            className="mt-2 inline-block text-sm text-primary hover:underline"
+          >
+            Back to fee structures
+          </Link>
+        </div>
+      );
+    }
+  }
 
   if (createdTemplate) {
     return (
@@ -222,11 +297,13 @@ export function CreateTemplatePage() {
     <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-4 py-10">
       <Card className="w-full lg:p-8">
         <div className="mb-6 lg:mb-8">
-          <CardTitle>Create fee structure</CardTitle>
+          <CardTitle>
+            {isEdit ? "Edit fee structure" : "Create fee structure"}
+          </CardTitle>
           <CardDescription className="mt-2 max-w-3xl text-pretty">
-            Define a reusable fee definition. After you create it, you can
-            assign it to students on the next step. Installments use dates here;
-            the API stores them as days relative to the earliest date.
+            {isEdit
+              ? "Update the title, type, amounts, default due date, or installment schedule. Existing fees already created from this structure are not changed — only new assignments use the updated definition."
+              : "Define a reusable fee definition. After you create it, you can assign it to students on the next step. Installments use dates here; the API stores them as days relative to the earliest date."}
           </CardDescription>
         </div>
 
@@ -472,7 +549,13 @@ export function CreateTemplatePage() {
               disabled={!canSubmit}
               className="w-full sm:w-auto"
             >
-              {createMutation.isPending ? "Creating…" : "Create structure"}
+              {savePending
+                ? isEdit
+                  ? "Saving…"
+                  : "Creating…"
+                : isEdit
+                  ? "Save changes"
+                  : "Create structure"}
             </Button>
           </div>
         </form>

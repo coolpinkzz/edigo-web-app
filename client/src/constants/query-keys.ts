@@ -2,7 +2,11 @@ export const authMeQueryKey = ["auth", "me"] as const;
 
 export const coursesQueryKey = ["courses"] as const;
 
+export const branchesQueryKey = ["branches"] as const;
+
 export const feeTemplatesQueryKey = ["fee-templates"] as const;
+
+export const quotationsQueryKey = ["quotations"] as const;
 
 export const studentsQueryKey = ["students"] as const;
 

@@ -14,6 +14,8 @@ export interface IDefaultInstallmentTemplate {
 
 export interface IFeeTemplate extends Document {
   tenantId: string;
+  /** When set, template is intended for a single campus (listing/filtering). */
+  branchId?: string;
 
   title: string;
   description?: string;
@@ -61,6 +63,7 @@ const DefaultInstallmentTemplateSchema = new Schema<IDefaultInstallmentTemplate>
 const FeeTemplateSchema = new Schema<IFeeTemplate>(
   {
     tenantId: { type: String, required: true, index: true },
+    branchId: { type: String, trim: true, index: true, sparse: true },
 
     title: { type: String, required: true, trim: true },
     description: { type: String, trim: true },
@@ -94,6 +97,7 @@ const FeeTemplateSchema = new Schema<IFeeTemplate>(
 );
 
 FeeTemplateSchema.index({ tenantId: 1, feeType: 1 });
+FeeTemplateSchema.index({ tenantId: 1, branchId: 1 });
 
 export const FeeTemplate: Model<IFeeTemplate> =
   mongoose.models.FeeTemplate ??

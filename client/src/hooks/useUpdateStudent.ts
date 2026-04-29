@@ -13,18 +13,26 @@ export function useUpdateStudent() {
       studentId,
       values,
       photoFile,
+      includeBranchInApiPayload,
     }: {
       studentId: string;
       values: CreateStudentFormValues;
       photoFile?: File | null;
+      includeBranchInApiPayload?: boolean;
     }) => {
       const me = queryClient.getQueryData<AuthMeResponse>(authMeQueryKey);
       const tenantType = me?.tenant?.tenantType ?? "SCHOOL";
+      const patchOpts = { includeBranchInApiPayload };
       if (photoFile) {
         const url = await uploadStudentPhotoAndGetUrl(studentId, photoFile);
-        return updateStudent(studentId, { ...values, photoUrl: url }, tenantType);
+        return updateStudent(
+          studentId,
+          { ...values, photoUrl: url },
+          tenantType,
+          patchOpts,
+        );
       }
-      return updateStudent(studentId, values, tenantType);
+      return updateStudent(studentId, values, tenantType, patchOpts);
     },
     onSuccess: async (_, { studentId }) => {
       await queryClient.invalidateQueries({ queryKey: studentsQueryKey });

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Clock, IndianRupee, Users } from "lucide-react";
+import { AlertTriangle, CalendarDays, IndianRupee, Users } from "lucide-react";
 import { ClassPerformanceChart } from "../components/dashboard/ClassPerformanceChart";
 import { DashboardDateRangePicker } from "../components/dashboard/DashboardDateRangePicker";
 import { RevenueTrendChart } from "../components/dashboard/RevenueTrendChart";
@@ -30,7 +30,7 @@ function inferTrendGranularity(
   return "monthly";
 }
 
-type PeriodTab = "this-month" | "till-date" | "custom";
+type PeriodTab = "this-month" | "this-year" | "custom";
 
 type DashboardRange = {
   from: Date;
@@ -45,8 +45,9 @@ function buildDashboardRange(
   customTo: string,
 ): DashboardRange {
   const now = new Date();
-  if (tab === "till-date") {
-    return { from: new Date(0), to: now, compare: false, valid: true };
+  if (tab === "this-year") {
+    const from = new Date(Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
+    return { from, to: now, compare: true, valid: true };
   }
   if (tab === "this-month") {
     const from = new Date(
@@ -132,9 +133,6 @@ export function DashboardPage() {
     <div className="space-y-6">
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-md shadow-black/[0.06]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Overview</h2>
-          </div>
           <div
             className="inline-flex rounded-lg border border-border bg-muted p-0.5"
             role="tablist"
@@ -156,16 +154,16 @@ export function DashboardPage() {
             <button
               type="button"
               role="tab"
-              aria-selected={periodTab === "till-date"}
+              aria-selected={periodTab === "this-year"}
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                periodTab === "till-date"
+                periodTab === "this-year"
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
-              onClick={() => setPeriodTab("till-date")}
+              onClick={() => setPeriodTab("this-year")}
             >
-              Till date
+              This year
             </button>
             <button
               type="button"
@@ -213,7 +211,7 @@ export function DashboardPage() {
           </p>
         ) : null}
 
-        <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <div className="rounded-lg border border-white/20 bg-primary-gradient p-4 text-primary-foreground shadow-lg shadow-black/20">
             <dt className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-primary-foreground/80">
               <span
@@ -261,6 +259,26 @@ export function DashboardPage() {
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 ring-1 ring-primary-foreground/20"
                 aria-hidden
               >
+                <CalendarDays className="h-4 w-4 opacity-90" />
+              </span>
+              Expected collectable
+            </dt>
+            <dd className="mt-1 text-2xl font-semibold tabular-nums text-primary-foreground">
+              {loadingMetrics
+                ? "—"
+                : formatInr(d?.expectedCollectable.amount ?? 0)}
+            </dd>
+            <p className="mt-2 text-xs text-primary-foreground/85">
+              Installment schedule + lump-sum by end date
+            </p>
+          </div>
+
+          {/* <div className="rounded-lg border border-white/20 bg-primary-gradient p-4 text-primary-foreground shadow-lg shadow-black/20">
+            <dt className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-primary-foreground/80">
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 ring-1 ring-primary-foreground/20"
+                aria-hidden
+              >
                 <Clock className="h-4 w-4 opacity-90" />
               </span>
               Pending (total due)
@@ -271,7 +289,7 @@ export function DashboardPage() {
             <p className="mt-2 text-xs text-primary-foreground/85">
               All open fees
             </p>
-          </div>
+          </div> */}
 
           <div className="rounded-lg border border-white/20 bg-primary-gradient p-4 text-primary-foreground shadow-lg shadow-black/20">
             <dt className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-primary-foreground/80">
@@ -284,7 +302,9 @@ export function DashboardPage() {
               Total overdue amount
             </dt>
             <dd className="mt-1 text-2xl font-semibold tabular-nums text-primary-foreground">
-              {loadingOverdue ? "—" : formatInr(overdueSummary?.totalOverdueAmount ?? 0)}
+              {loadingOverdue
+                ? "—"
+                : formatInr(overdueSummary?.totalOverdueAmount ?? 0)}
             </dd>
             <p className="mt-2 text-xs text-primary-foreground/85">
               Past-due installment balances
@@ -302,9 +322,7 @@ export function DashboardPage() {
               Students with overdue installments
             </dt>
             <dd className="mt-1 text-2xl font-semibold tabular-nums text-primary-foreground">
-              {loadingOverdue
-                ? "—"
-                : (overdueSummary?.totalStudents ?? "—")}
+              {loadingOverdue ? "—" : (overdueSummary?.totalStudents ?? "—")}
             </dd>
             <p className="mt-2 text-xs text-primary-foreground/85">
               Distinct students with at least one overdue
@@ -320,8 +338,8 @@ export function DashboardPage() {
               Revenue trend
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Collected (online + manual) vs installment amounts scheduled in
-              each period. Same date range as Overview
+              Collected (online + manual) per period. Same date range as
+              Overview
               {trendWindow.clamped ? " (last 2 years for this chart)" : ""}.
             </p>
           </div>
@@ -361,8 +379,8 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
-
-      <div className="rounded-xl border border-card-border bg-card p-6 shadow-md shadow-black/[0.06]">
+      {/* to be added later */}
+      {/* <div className="rounded-xl border border-card-border bg-card p-6 shadow-md shadow-black/[0.06]">
         <h2 className="text-lg font-semibold text-foreground">
           Settlement reconciliation
         </h2>
@@ -380,7 +398,7 @@ export function DashboardPage() {
             }
           />
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

@@ -23,9 +23,9 @@ export function PaymentAlreadyPaidPage() {
         <Card className="p-6 shadow-md">
           <CardTitle className="text-base">You’re all set</CardTitle>
           <CardDescription className="mt-2">
-            No further payment is needed for this fee installment. If you believe
-            this is a mistake, contact the school office with your scholar or
-            admission details.
+            No further payment is needed for this fee installment. If you
+            believe this is a mistake, contact the school office with your
+            scholar or admission details.
           </CardDescription>
         </Card>
       </div>

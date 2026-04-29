@@ -6,11 +6,13 @@ import {
   CardDescription,
   CardTitle,
   ConfirmationModal,
+  Input,
   SELECT_EMPTY_VALUE,
   SelectField,
 } from "../ui";
 import { useAssignFeeTemplate } from "../../hooks/useAssignFeeTemplate";
 import { useAuthSession } from "../../hooks/useAuthSession";
+import { useDebouncedString } from "../../hooks/useDebouncedValue";
 import { useStudents } from "../../hooks/useStudents";
 import {
   FEE_TYPE_OPTIONS,
@@ -84,8 +86,12 @@ export function FeeTemplateAssignPanel({
 
   const [filterClass, setFilterClass] = useState<"" | StudentClass>("");
   const [studentPage, setStudentPage] = useState(1);
+  const [studentSearchInput, setStudentSearchInput] = useState("");
+  const debouncedStudentSearch = useDebouncedString(studentSearchInput, 300);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [success, setSuccess] = useState<AssignTemplateToFeesResult | null>(null);
+  const [success, setSuccess] = useState<AssignTemplateToFeesResult | null>(
+    null,
+  );
   const [alertModal, setAlertModal] = useState<{
     open: boolean;
     title: string;
@@ -121,6 +127,10 @@ export function FeeTemplateAssignPanel({
     };
   }, []);
 
+  useEffect(() => {
+    setStudentPage(1);
+  }, [debouncedStudentSearch, mode, filterClass, assignClass, assignSection]);
+
   const previewQuery = useStudents(
     {
       page: 1,
@@ -130,13 +140,31 @@ export function FeeTemplateAssignPanel({
     { enabled: isSchool && mode === "class" },
   );
 
+  const searchTrimmed = debouncedStudentSearch.trim();
   const listQuery = useStudents(
     {
       page: studentPage,
       limit: STUDENT_PAGE_SIZE,
-      class: isSchool ? filterClass || undefined : undefined,
+      class:
+        mode === "manual"
+          ? isSchool
+            ? filterClass || undefined
+            : undefined
+          : assignClass,
+      section:
+        mode === "class" &&
+        isSchool &&
+        assignSection &&
+        assignSection !== SECTION_ANY
+          ? (assignSection as StudentSection)
+          : undefined,
+      search: searchTrimmed || undefined,
     },
-    { enabled: mode === "manual" },
+    {
+      enabled:
+        mode === "manual" ||
+        (mode === "class" && isSchool && searchTrimmed.length > 0),
+    },
   );
 
   const classTotal = previewQuery.data?.total;
@@ -257,6 +285,7 @@ export function FeeTemplateAssignPanel({
     setSuccess(null);
     setSelectedIds([]);
     setStudentPage(1);
+    setStudentSearchInput("");
   };
 
   const canSubmitClass = isSchool && mode === "class";
@@ -311,15 +340,19 @@ export function FeeTemplateAssignPanel({
 
   return (
     <Card className="p-0! overflow-hidden">
-      <div className="border-b border-border px-6 py-4">
-        <CardTitle className="text-lg">Who should receive this fee?</CardTitle>
-        <CardDescription>
+      <div className="border-b border-border px-6 py-4 bg-primary-gradient">
+        <CardTitle className="text-lg text-primary-foreground">
+          Who should receive this fee?
+        </CardTitle>
+        <CardDescription className="text-primary-foreground">
           {isSchool
             ? "Use either a class filter or pick students — not both. Duplicates are skipped automatically."
             : "Pick students to assign. Duplicates are skipped automatically."}
         </CardDescription>
-        <p className="mt-2 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground/90">{title}</span>
+        <p className="mt-2 text-sm text-muted-foreground text-primary-foreground">
+          <span className="font-medium text-foreground/90 text-primary-foreground">
+            {title}
+          </span>
           {" · "}
           {feeTypeLabel(feeType)} ·{" "}
           {totalAmount.toLocaleString(undefined, {
@@ -371,10 +404,26 @@ export function FeeTemplateAssignPanel({
             </button>
           </div>
         ) : (
-          <p className="text-sm font-medium text-foreground">
-            Choose students
-          </p>
+          <p className="text-sm font-medium text-foreground">Choose students</p>
         )}
+
+        <div className="min-w-0 max-w-xl">
+          <Input
+            label="Search students"
+            name="assign-student-search"
+            placeholder="Name, admission ID, scholar ID…"
+            value={studentSearchInput}
+            onChange={(e) => setStudentSearchInput(e.target.value)}
+            autoComplete="off"
+            aria-label="Search students"
+          />
+          {isSchool && mode === "class" && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Preview only — assignment still applies to the whole class (and
+              section, if you picked one).
+            </p>
+          )}
+        </div>
 
         {mode === "class" && isSchool && (
           <div className="space-y-4">
@@ -398,9 +447,7 @@ export function FeeTemplateAssignPanel({
                     : assignSection
                 }
                 onValueChange={(v) =>
-                  setAssignSection(
-                    v === SELECT_EMPTY_VALUE ? SECTION_ANY : v,
-                  )
+                  setAssignSection(v === SELECT_EMPTY_VALUE ? SECTION_ANY : v)
                 }
                 name="assign-section"
               />
@@ -431,6 +478,105 @@ export function FeeTemplateAssignPanel({
               server may reject a class-only run if it matches too many students
               — use a section in that case.
             </p>
+
+            {searchTrimmed.length > 0 && (
+              <div className="space-y-3 border-t border-border pt-4">
+                {listQuery.isLoading && (
+                  <p className="text-sm text-muted-foreground">Searching…</p>
+                )}
+                {listQuery.isError && (
+                  <p className="text-sm text-red-600" role="alert">
+                    Failed to load students.
+                  </p>
+                )}
+                {!listQuery.isLoading &&
+                  !listQuery.isError &&
+                  listQuery.data &&
+                  listQuery.data.data.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No students match this search in the selected class
+                      {assignSection && assignSection !== SECTION_ANY
+                        ? ` · section ${assignSection}`
+                        : ""}
+                      .
+                    </p>
+                  )}
+                {!listQuery.isLoading &&
+                  listQuery.data &&
+                  listQuery.data.data.length > 0 && (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        <strong className="tabular-nums text-foreground">
+                          {listQuery.data.total}
+                        </strong>{" "}
+                        student
+                        {listQuery.data.total === 1 ? "" : "s"} match this
+                        search.
+                      </p>
+                      <div className="overflow-x-auto rounded-lg border border-card-border bg-card shadow-md shadow-black/[0.06]">
+                        <table className="w-full min-w-[24rem] text-left text-sm">
+                          <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Student</th>
+                              <th className="px-3 py-2 font-medium">Class</th>
+                              <th className="px-3 py-2 font-medium">Parent</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {listQuery.data.data.map((s) => (
+                              <tr key={s.id} className="bg-card">
+                                <td className="px-3 py-2 font-medium text-foreground">
+                                  {s.studentName}
+                                </td>
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {`${s.class ?? "—"} · ${s.section ?? "—"}`}
+                                </td>
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {s.parentName}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {listQuery.data.totalPages > 1 && (
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm text-muted-foreground">
+                            Page {listQuery.data.page} of{" "}
+                            {listQuery.data.totalPages}
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={studentPage <= 1}
+                              onClick={() =>
+                                setStudentPage((p) => Math.max(1, p - 1))
+                              }
+                            >
+                              Previous
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={
+                                studentPage >= listQuery.data.totalPages
+                              }
+                              onClick={() =>
+                                setStudentPage((p) =>
+                                  p < listQuery.data!.totalPages ? p + 1 : p,
+                                )
+                              }
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+              </div>
+            )}
           </div>
         )}
 
@@ -444,9 +590,7 @@ export function FeeTemplateAssignPanel({
                     name="manual-class"
                     options={classFilterOptions}
                     value={
-                      filterClass === ""
-                        ? SELECT_EMPTY_VALUE
-                        : filterClass
+                      filterClass === "" ? SELECT_EMPTY_VALUE : filterClass
                     }
                     onValueChange={(v) => {
                       setStudentPage(1);
@@ -544,7 +688,7 @@ export function FeeTemplateAssignPanel({
                             <td className="px-3 py-2 text-muted-foreground">
                               {isSchool
                                 ? `${s.class ?? "—"} · ${s.section ?? "—"}`
-                                : s.course?.name ?? s.courseId ?? "—"}
+                                : (s.course?.name ?? s.courseId ?? "—")}
                             </td>
                             <td className="px-3 py-2 text-muted-foreground">
                               {s.parentName}
@@ -619,14 +763,10 @@ export function FeeTemplateAssignPanel({
         </div>
         <ConfirmationModal
           open={alertModal.open}
-          onOpenChange={(open) =>
-            setAlertModal((prev) => ({ ...prev, open }))
-          }
+          onOpenChange={(open) => setAlertModal((prev) => ({ ...prev, open }))}
           title={alertModal.title}
           description={alertModal.description}
-          onConfirm={() =>
-            setAlertModal((prev) => ({ ...prev, open: false }))
-          }
+          onConfirm={() => setAlertModal((prev) => ({ ...prev, open: false }))}
           confirmLabel="OK"
           cancelLabel="Close"
         />

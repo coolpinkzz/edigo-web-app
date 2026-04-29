@@ -12,6 +12,8 @@ import reminderRoutes from "./routes/reminder.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import attendanceRoutes from "./routes/attendance.routes";
 import invoiceRoutes from "./routes/invoice.routes";
+import branchRoutes from "./routes/branch.routes";
+import quotationRoutes from "./routes/quotation.routes";
 import publicRoutes from "./routes/public.routes";
 import { swaggerSpec } from "./config/swagger";
 import { env } from "./config/env";
@@ -74,11 +76,18 @@ app.use("/fee-templates", feeTemplateRoutes);
 // Course catalog (tenant-specific; student.courseId references Course id)
 app.use("/courses", courseRoutes);
 
+// Branches (optional multi-campus; tenant-scoped)
+app.use("/branches", branchRoutes);
+
+// Quotations (lead quotes, PDF + SMS)
+app.use("/quotations", quotationRoutes);
+
 // Razorpay payments (create-order + webhook)
 app.use("/payments", paymentRoutes);
 
-// Public pay page from SMS reminder (opaque token → Razorpay Checkout)
+// Public pay page from SMS reminder (opaque token or /p/ short code → Razorpay Checkout)
 app.use("/pay", payRoutes);
+app.use("/p", payRoutes);
 
 // Invoices (public read by payment id — issued after successful gateway capture)
 app.use("/invoices", invoiceRoutes);

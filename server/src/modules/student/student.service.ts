@@ -1,6 +1,14 @@
 import mongoose, { FilterQuery } from "mongoose";
+import { assertBranchBelongsToTenant } from "../branch/branch.service";
+import { JwtPayload } from "../../types/express";
+import {
+  BranchScope,
+  assertDocumentBranchAccess,
+  mergeBranchScopeOnQuery,
+} from "../../types/branch-scope";
 import { Tenant } from "../auth/tenant.model";
 import { Course } from "../course/course.model";
+import { Fee } from "../fee/fee.model";
 import { assertCourseBelongsToTenant } from "../course/course.service";
 import {
   createFeeFromTemplateSnapshot,
@@ -38,6 +46,7 @@ export interface CreateStudentInput {
   leftAt?: Date;
   tags?: string[];
   dateOfBirth?: Date;
+  age?: number;
   gender?: StudentGender;
   address?: string;
   /** Whole months, 1–12 (typically academy enrollment length). */
@@ -51,15 +60,19 @@ export interface CreateStudentInput {
   feeOverrides?: FeeTemplateCreateOverrides;
   useCustomInstallments?: boolean;
   customInstallments?: CustomAssignmentInstallmentRow[];
+  /** Optional campus (must exist on tenant). */
+  branchId?: string;
 }
 
 export type UpdateStudentInput = Partial<CreateStudentInput> & {
   dateOfBirth?: Date | null;
+  age?: number | null;
   gender?: StudentGender | null;
   address?: string | null;
   alternatePhone?: string | null;
   courseDurationMonths?: number | null;
   photoUrl?: string | null;
+  branchId?: string | null;
 };
 
 export interface ListStudentsParams {
@@ -70,6 +83,8 @@ export interface ListStudentsParams {
   section?: StudentSection;
   /** Case-insensitive substring match on studentName, admissionId, or scholarId. */
   search?: string;
+  /** From JWT + optional `branchId` query. */
+  branchScope?: BranchScope;
 }
 
 function escapeRegex(s: string): string {
@@ -121,9 +136,11 @@ export interface SerializedStudent {
   leftAt?: Date;
   tags?: string[];
   dateOfBirth?: Date;
+  age?: number;
   gender?: StudentGender;
   address?: string;
   photoUrl?: string;
+  branchId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -166,9 +183,11 @@ export function serializeStudent(doc: IStudent): SerializedStudent {
     leftAt: doc.leftAt,
     tags: doc.tags,
     dateOfBirth: doc.dateOfBirth,
+    age: doc.age,
     gender: doc.gender,
     address: doc.address,
     photoUrl: doc.photoUrl,
+    branchId: doc.branchId,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -305,6 +324,13 @@ async function assignFeeFromTemplateInTransaction(
     customInstallments = input.customInstallments;
   }
 
+  const stu = await Student.findById(studentId)
+    .session(session)
+    .select("branchId")
+    .lean();
+  const feeBranchId =
+    typeof stu?.branchId === "string" && stu.branchId ? stu.branchId : undefined;
+
   return createFeeFromTemplateSnapshot(
     tenantId,
     template,
@@ -314,6 +340,7 @@ async function assignFeeFromTemplateInTransaction(
     session,
     customInstallments,
     input.feeTemplateDiscountPercent,
+    feeBranchId,
   );
 }
 
@@ -340,6 +367,7 @@ function createStudentDocPayload(
     leftAt: input.leftAt,
     tags: input.tags,
     ...(input.dateOfBirth != null ? { dateOfBirth: input.dateOfBirth } : {}),
+    ...(input.age != null ? { age: input.age } : {}),
     ...(input.gender != null ? { gender: input.gender } : {}),
     ...(input.address != null && input.address !== ""
       ? { address: input.address }
@@ -350,6 +378,9 @@ function createStudentDocPayload(
     ...(input.photoUrl != null && input.photoUrl !== ""
       ? { photoUrl: input.photoUrl }
       : {}),
+    ...(input.branchId != null && input.branchId !== ""
+      ? { branchId: input.branchId }
+      : {}),
   };
 }
 
@@ -357,6 +388,10 @@ export async function createStudent(
   tenantId: string,
   input: CreateStudentInput,
 ): Promise<StudentCreatedResult> {
+  if (input.branchId) {
+    await assertBranchBelongsToTenant(tenantId, input.branchId);
+  }
+
   const tenantType = await getTenantType(tenantId);
   const courseId = normalizeCourseId(input.courseId);
 
@@ -433,7 +468,14 @@ export async function listStudents(
   tenantId: string,
   params: ListStudentsParams,
 ): Promise<PaginatedStudents> {
-  const filter: FilterQuery<IStudent> = { tenantId };
+  const base: FilterQuery<IStudent> = { tenantId };
+  const filter: FilterQuery<IStudent> =
+    params.branchScope != null
+      ? (mergeBranchScopeOnQuery(
+          base,
+          params.branchScope,
+        ) as FilterQuery<IStudent>)
+      : base;
 
   if (params.status !== undefined) {
     filter.status = params.status;
@@ -482,6 +524,7 @@ export async function listStudents(
 export async function getStudentById(
   tenantId: string,
   id: string,
+  accessUser?: JwtPayload,
 ): Promise<StudentPublic | null> {
   if (!mongoose.isValidObjectId(id)) {
     return null;
@@ -489,6 +532,9 @@ export async function getStudentById(
   const doc = await Student.findOne({ _id: id, tenantId }).exec();
   if (!doc) {
     return null;
+  }
+  if (accessUser) {
+    assertDocumentBranchAccess(accessUser, doc.branchId);
   }
   const tenantType = await getTenantType(tenantId);
   const s = applyTenantResponseShape(tenantType, serializeStudent(doc));
@@ -525,6 +571,12 @@ export async function updateStudent(
     await assertCourseBelongsToTenant(tenantId, patch.courseId);
   }
 
+  if (Object.prototype.hasOwnProperty.call(input, "branchId")) {
+    if (input.branchId != null && input.branchId !== "") {
+      await assertBranchBelongsToTenant(tenantId, input.branchId);
+    }
+  }
+
   const nextClass =
     patch.class !== undefined ? patch.class : existing.class;
   const nextSection =
@@ -549,6 +601,25 @@ export async function updateStudent(
   if (!doc) {
     return null;
   }
+
+  if (Object.prototype.hasOwnProperty.call(input, "branchId")) {
+    const before = String(existing.branchId ?? "");
+    const after = String(doc.branchId ?? "");
+    if (before !== after) {
+      if (doc.branchId) {
+        await Fee.updateMany(
+          { tenantId, studentId: id },
+          { $set: { branchId: doc.branchId } },
+        ).exec();
+      } else {
+        await Fee.updateMany(
+          { tenantId, studentId: id },
+          { $unset: { branchId: 1 } },
+        ).exec();
+      }
+    }
+  }
+
   const s = applyTenantResponseShape(tenantType, serializeStudent(doc));
   return (await attachCourseSummaries(tenantId, tenantType, [s]))[0]!;
 }

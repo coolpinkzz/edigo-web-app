@@ -68,7 +68,7 @@ function extractRazorpayErrorMessage(body: unknown): string {
 
 export type RegisteredAddressInput = {
   street1: string;
-  street2?: string;
+  street2: string;
   city: string;
   state: string;
   postalCode: string;
@@ -114,15 +114,12 @@ function buildRazorpayBody(
   const reg = input.profile.addresses.registered;
   const registered: Record<string, string> = {
     street1: reg.street1.trim(),
+    street2: reg.street2.trim(),
     city: reg.city.trim(),
     state: reg.state.trim().toUpperCase(),
     postal_code: reg.postalCode.trim(),
     country: reg.country.trim().toUpperCase(),
   };
-  const street2 = reg.street2?.trim();
-  if (street2) {
-    registered.street2 = street2;
-  }
 
   const body: Record<string, unknown> = {
     email: input.email.trim().toLowerCase(),

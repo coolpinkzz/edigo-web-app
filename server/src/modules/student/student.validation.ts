@@ -88,6 +88,8 @@ const courseDurationMonthsField = Joi.number()
     "number.max": `courseDurationMonths must be at most ${COURSE_DURATION_MONTHS_MAX}`,
   });
 
+const ageField = Joi.number();
+
 /** Must match a Course document id for this tenant when set. */
 const courseIdField = Joi.string()
   .trim()
@@ -172,10 +174,12 @@ const createStudentFieldsSchema = Joi.object({
   leftAt: Joi.date().optional(),
   tags: Joi.array().items(Joi.string().trim()).optional(),
   dateOfBirth: Joi.date().optional(),
+  age: ageField.optional(),
   gender: genderField.optional().allow("", null).empty([null, ""]),
   address: Joi.string().trim().optional().allow("", null).empty([null, ""]).max(500),
   courseDurationMonths: courseDurationMonthsField.optional(),
   photoUrl: httpsPhotoUrl.optional().allow("", null).empty([null, ""]),
+  branchId: Joi.string().hex().length(24).optional().allow("", null).empty([null, ""]),
 });
 
 /** POST /students — body */
@@ -255,6 +259,9 @@ const updateStudentBodySchema = Joi.object({
   dateOfBirth: Joi.alternatives()
     .try(Joi.date(), Joi.valid(null))
     .optional(),
+  age: Joi.alternatives()
+    .try(Joi.valid(null), ageField)
+    .optional(),
   gender: Joi.alternatives()
     .try(genderField, Joi.valid(null))
     .optional(),
@@ -267,6 +274,13 @@ const updateStudentBodySchema = Joi.object({
   photoUrl: Joi.alternatives()
     .try(Joi.valid(null), httpsPhotoUrl)
     .optional(),
+  branchId: Joi.string()
+    .hex()
+    .length(24)
+    .optional()
+    .allow(null)
+    .empty([null, ""])
+    .messages({ "string.length": "branchId must be a valid 24-character hex id" }),
 })
   .min(1)
   .messages({
@@ -283,6 +297,12 @@ const listStudentsQuerySchema = Joi.object({
   search: Joi.string()
     .trim()
     .max(200)
+    .optional()
+    .allow("", null)
+    .empty([null, ""]),
+  branchId: Joi.string()
+    .hex()
+    .length(24)
     .optional()
     .allow("", null)
     .empty([null, ""]),
@@ -309,7 +329,7 @@ const feeOverviewQuerySchema = Joi.object({
     .optional()
     .allow("", null)
     .empty([null, ""]),
-  /** Comma-separated fee types, e.g. `TUITION,TRANSPORT` */
+  /** Comma-separated fee types, e.g. `TUITION,ADMISSION,RENEW` */
   feeTypes: Joi.string()
     .trim()
     .max(500)
@@ -320,6 +340,12 @@ const feeOverviewQuerySchema = Joi.object({
     .valid("studentName", "class", "pendingTotal", "createdAt")
     .default("studentName"),
   sortDir: Joi.string().valid("asc", "desc").default("asc"),
+  branchId: Joi.string()
+    .hex()
+    .length(24)
+    .optional()
+    .allow("", null)
+    .empty([null, ""]),
 }).unknown(false);
 
 /** MongoDB ObjectId for :id routes */
@@ -406,10 +432,12 @@ export interface CreateStudentBody {
     leftAt?: Date;
     tags?: string[];
     dateOfBirth?: Date;
+    age?: number;
     gender?: StudentGender;
     address?: string;
     courseDurationMonths?: number;
     photoUrl?: string;
+    branchId?: string;
   };
   feeAssignment?: {
     templateId: string;
@@ -442,10 +470,12 @@ export interface CreateStudentBody {
   leftAt?: Date;
   tags?: string[];
   dateOfBirth?: Date;
+  age?: number;
   gender?: StudentGender;
   address?: string;
   courseDurationMonths?: number;
   photoUrl?: string;
+  branchId?: string;
   /** Optional: instantiate this fee template for the new student (tenant-scoped). */
   feeTemplateId?: string;
   assignmentAnchorDate?: Date;
@@ -460,6 +490,8 @@ export type UpdateStudentBody = Partial<
 > & {
   /** Set to `null` to remove the stored photo URL. */
   photoUrl?: string | null;
+  branchId?: string | null;
+  age?: number | null;
 };
 
 export interface ListStudentsQuery {
@@ -469,6 +501,7 @@ export interface ListStudentsQuery {
   class?: StudentClass;
   section?: StudentSection;
   search?: string;
+  branchId?: string;
 }
 
 export interface FeeOverviewQuery {
@@ -482,6 +515,7 @@ export interface FeeOverviewQuery {
   feeTypes?: string;
   sortBy: StudentFeeOverviewSortBy;
   sortDir: "asc" | "desc";
+  branchId?: string;
 }
 
 /** POST /students/import/confirm (after Joi validation) */

@@ -17,13 +17,16 @@ export interface DashboardOverviewParams {
 export async function getDashboardOverview(
   params: DashboardOverviewParams,
 ): Promise<DashboardOverviewDto> {
-  const { data } = await apiClient.get<DashboardOverviewDto>("/dashboard/overview", {
-    params: {
-      from: params.from.toISOString(),
-      to: params.to.toISOString(),
-      compare: params.compare ?? false,
+  const { data } = await apiClient.get<DashboardOverviewDto>(
+    "/dashboard/overview",
+    {
+      params: {
+        from: params.from.toISOString(),
+        to: params.to.toISOString(),
+        compare: params.compare ?? false,
+      },
     },
-  });
+  );
   return data;
 }
 
@@ -57,8 +60,8 @@ export async function getClassPerformance(): Promise<ClassPerformanceDto> {
 }
 
 export interface DashboardSettlementsParams {
-  page?: number
-  limit?: number
+  page?: number;
+  limit?: number;
 }
 
 export async function getDashboardSettlements(

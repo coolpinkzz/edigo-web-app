@@ -27,7 +27,8 @@ export async function sendSms(
     logger.info(SCOPE, "SMS (console)", {
       to: maskPhone(toE164),
       bodyLength: body.length,
-      body,
+      bodyPreview:
+        body.length > 160 ? `${body.slice(0, 160)}…` : body,
     });
     return { ok: true };
   }

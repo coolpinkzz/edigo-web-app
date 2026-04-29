@@ -67,6 +67,8 @@ export interface StudentCourseSummary {
 export interface StudentDto {
   id: string;
   tenantId: string;
+  /** Set when the student is tied to a campus; omitted for legacy or single-site tenants. */
+  branchId?: string;
   studentName: string;
   scholarId?: string;
   parentName: string;
@@ -74,6 +76,8 @@ export interface StudentDto {
   alternatePhone?: string;
   panNumber?: string;
   dateOfBirth?: string;
+  /** Optional numeric age. */
+  age?: number;
   gender?: StudentGender;
   address?: string;
   class: StudentClass | null;
@@ -109,6 +113,8 @@ export interface CreateStudentFormValues {
   scholarId: string;
   panNumber: string;
   dateOfBirth: string;
+  /** Empty string means not set. */
+  age: string;
   gender: StudentGender | "";
   address: string;
   /** Used when tenant is SCHOOL. */
@@ -133,6 +139,8 @@ export interface CreateStudentFormValues {
     amount: number;
     dueDate: string;
   }[];
+  /** When the tenant has branches, maps to `branchId` on the server. */
+  branchId: string;
   /** Profile photo URL after upload; empty string means none / clear on save. */
   photoUrl: string;
 }

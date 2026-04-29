@@ -2,9 +2,12 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 /**
  * Opaque token for `GET /pay/:token` — not guessable (unlike raw installment ObjectIds).
+ * `shortCode` is what we put in SMS (`GET /p/:shortCode`); much shorter than the 48-char hex `token`.
  */
 export interface IReminderToken extends Document {
   token: string;
+  /** URL-safe id for `GET /p/:shortCode` (reminder SMS). */
+  shortCode?: string;
   installmentId: string;
   feeId: string;
   studentId: string;
@@ -19,6 +22,7 @@ export interface IReminderToken extends Document {
 const ReminderTokenSchema = new Schema<IReminderToken>(
   {
     token: { type: String, required: true, unique: true, trim: true },
+    shortCode: { type: String, unique: true, sparse: true, trim: true, index: true },
     /**
      * Installment ObjectId string, or synthetic `lump:${feeId}` for lump-sum fees
      * (SMS link target; one row per installment or per lump-sum fee).

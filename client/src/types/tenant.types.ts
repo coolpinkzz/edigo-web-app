@@ -42,6 +42,8 @@ export interface AuthMeResponse {
   tenant: {
     name: string;
     tenantType: TenantType;
+    /** Public URL for organization logo (sidebar), when set. */
+    logoUrl?: string;
     /** Omitted on older API responses until session is refreshed. */
     razorpayLinkedAccount?: RazorpayLinkedAccountSummary;
     razorpayRoute?: RazorpayRouteSummary;
@@ -53,6 +55,7 @@ export interface PatchTenantResponse {
   tenant: {
     name: string;
     tenantType: TenantType;
+    logoUrl?: string;
     razorpayLinkedAccount?: RazorpayLinkedAccountSummary;
     razorpayRoute?: RazorpayRouteSummary;
   };
@@ -72,7 +75,7 @@ export interface CreateRazorpayLinkedAccountBody {
     addresses: {
       registered: {
         street1: string;
-        street2?: string;
+        street2: string;
         city: string;
         state: string;
         postalCode: string;

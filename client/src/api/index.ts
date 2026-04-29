@@ -6,8 +6,10 @@ export {
   login,
   patchTenant,
   requestPasswordResetOtp,
-  verifyPasswordResetOtp,
   resetPasswordAfterOtp,
+  TENANT_LOGO_MAX_BYTES,
+  uploadTenantLogoAndGetUrl,
+  verifyPasswordResetOtp,
 } from "./auth.api";
 export {
   createCourse,
@@ -18,11 +20,19 @@ export {
 } from "./course.api";
 export type { ListCoursesParams } from "./course.api";
 export {
+  createBranch,
+  deleteBranch,
+  getBranch,
+  listBranches,
+  updateBranch,
+} from "./branch.api";
+export {
   assignFeeTemplate,
   createFeeTemplate,
   deleteFeeTemplate,
   getFeeTemplate,
   listFeeTemplates,
+  updateFeeTemplate,
 } from "./template.api";
 export type { ListFeeTemplatesParams } from "./template.api";
 export {
@@ -68,3 +78,12 @@ export {
 } from "./team.api";
 export { bookDemoRequest } from "./demo.api";
 export type { BookDemoPayload } from "./demo.api";
+export {
+  createQuotation,
+  downloadQuotationPdfBlob,
+  getQuotation,
+  listQuotations,
+  sendQuotationPdfSms,
+  updateQuotation,
+} from "./quotation.api";
+export type { ListQuotationsParams } from "./quotation.api";

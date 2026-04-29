@@ -15,6 +15,7 @@ import type {
 import { IInstallment, Installment } from "./installment.model";
 import { recordManualPaymentCredit } from "./manual-payment-credit.service";
 import { logger } from "../../utils/logger";
+import { BranchScope, mergeBranchScopeOnQuery } from "../../types/branch-scope";
 import {
   BUSINESS_UTC_OFFSET,
   DAY_MS,
@@ -71,6 +72,8 @@ export interface ListFeesParams {
   studentId?: string;
   status?: FeeStatus;
   feeType?: FeeType;
+  /** Resolved from JWT + optional `branchId` query. */
+  branchScope?: BranchScope;
 }
 
 export interface ListOverdueFeesParams {
@@ -81,6 +84,7 @@ export interface ListOverdueFeesParams {
   /** Academy tenants: filter by student course catalog id. */
   courseId?: string;
   search?: string;
+  branchScope?: BranchScope;
 }
 
 /**
@@ -176,6 +180,7 @@ export function serializeFee(doc: IFee) {
   return {
     id: doc._id.toString(),
     tenantId: doc.tenantId,
+    branchId: doc.branchId,
     studentId: doc.studentId,
     source,
     templateId: source === "TEMPLATE" ? doc.templateId : undefined,
@@ -567,6 +572,8 @@ export async function createFeeFromTemplateSnapshot(
   session: ClientSession | null,
   customInstallments?: CustomAssignmentInstallmentRow[],
   principalDiscountPercent?: number,
+  /** Copied from the student row for branch-scoped reporting. */
+  studentBranchId?: string | null,
 ): Promise<ReturnType<typeof serializeFee>> {
   const opts = session ? { session } : {};
   const discountPercent = principalDiscountPercent ?? 0;
@@ -609,6 +616,9 @@ export async function createFeeFromTemplateSnapshot(
         startDate: merged.startDate,
         endDate: merged.endDate,
         tags: merged.tags,
+        ...(typeof studentBranchId === "string" && studentBranchId
+          ? { branchId: studentBranchId }
+          : {}),
       },
     ],
     opts,
@@ -705,6 +715,19 @@ export async function bulkCreateFeesFromTemplateSnapshot(
 
   const templateIdStr = template._id.toString();
 
+  const uniqueStudentIds = [...new Set(rows.map((r) => r.studentId))];
+  const stuRows = await Student.find({
+    _id: { $in: uniqueStudentIds },
+    tenantId,
+  })
+    .select("_id branchId")
+    .session(session)
+    .lean()
+    .exec();
+  const studentBranchById = new Map(
+    stuRows.map((s) => [s._id.toString(), s.branchId as string | undefined]),
+  );
+
   const feePayloads = rows.map(
     ({ studentId, merged, principalDiscountPercent }) => {
       const discountPercent = principalDiscountPercent ?? 0;
@@ -747,6 +770,9 @@ export async function bulkCreateFeesFromTemplateSnapshot(
         startDate: merged.startDate,
         endDate: merged.endDate,
         tags: merged.tags,
+        ...(studentBranchById.get(studentId)
+          ? { branchId: studentBranchById.get(studentId)! }
+          : {}),
       };
     },
   );
@@ -885,7 +911,10 @@ async function createFeeCustomRequest(
 
   const requestHash = hashFeeCreatePayload(input);
 
-  const feePayload = {
+  const stu = await Student.findOne({ _id: input.studentId, tenantId })
+    .select("branchId")
+    .lean();
+  const feePayload: Record<string, unknown> = {
     tenantId,
     studentId: input.studentId,
     source: "CUSTOM" as const,
@@ -903,9 +932,12 @@ async function createFeeCustomRequest(
     endDate: input.endDate,
     tags: input.tags,
   };
+  if (typeof stu?.branchId === "string" && stu.branchId) {
+    feePayload.branchId = stu.branchId;
+  }
 
   if (!options?.idempotencyKey) {
-    const created = await Fee.create(feePayload);
+    const created = (await Fee.create(feePayload)) as IFee;
     if (paidAmount > 0) {
       await recordManualPaymentCredit({
         tenantId,
@@ -913,6 +945,7 @@ async function createFeeCustomRequest(
         studentId: input.studentId,
         amount: paidAmount,
         recordedAt: created.createdAt,
+        ...(created.branchId ? { branchId: created.branchId } : {}),
       });
     }
     return { fee: serializeFee(created), replay: false };
@@ -963,6 +996,7 @@ async function createFeeCustomRequest(
         studentId: input.studentId,
         amount: paidAmount,
         recordedAt: created.createdAt,
+        ...(created.branchId ? { branchId: created.branchId } : {}),
       });
     }
     return { fee: serializeFee(created), replay: false };
@@ -1013,6 +1047,10 @@ async function createFeeFromTemplateRequest(
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
+      const stu = await Student.findOne({ _id: input.studentId, tenantId })
+        .select("branchId")
+        .session(session)
+        .lean();
       const fee = await createFeeFromTemplateSnapshot(
         tenantId,
         template,
@@ -1020,6 +1058,9 @@ async function createFeeFromTemplateRequest(
         anchor,
         merged,
         session,
+        undefined,
+        undefined,
+        stu?.branchId,
       );
       await session.commitTransaction();
       return { fee, replay: false };
@@ -1052,6 +1093,10 @@ async function createFeeFromTemplateRequest(
   session.startTransaction();
 
   try {
+    const stu = await Student.findOne({ _id: input.studentId, tenantId })
+      .select("branchId")
+      .session(session)
+      .lean();
     const createdSerialized = await createFeeFromTemplateSnapshot(
       tenantId,
       template,
@@ -1059,6 +1104,9 @@ async function createFeeFromTemplateRequest(
       anchor,
       merged,
       session,
+      undefined,
+      undefined,
+      stu?.branchId,
     );
 
     await FeeIdempotency.create(
@@ -1117,7 +1165,14 @@ export async function listFees(
   tenantId: string,
   params: ListFeesParams,
 ): Promise<PaginatedFees> {
-  const filter: FilterQuery<IFee> = { tenantId };
+  const base: FilterQuery<IFee> = { tenantId };
+  const filter: FilterQuery<IFee> =
+    params.branchScope != null
+      ? (mergeBranchScopeOnQuery(
+          base,
+          params.branchScope,
+        ) as FilterQuery<IFee>)
+      : base;
 
   if (params.studentId !== undefined && params.studentId !== "") {
     if (!mongoose.isValidObjectId(params.studentId)) {
@@ -1208,7 +1263,19 @@ export async function listOverdueFees(
   const todayStart = startOfTodayIst();
   logger.info("fee.listOverdueFees", "todayStartIst", { todayStart });
 
-  const tenantFees = await Fee.find({ tenantId }).select("_id").lean().exec();
+  const baseOverdue: FilterQuery<IFee> = { tenantId };
+  const feeOverdueFilter: FilterQuery<IFee> =
+    params.branchScope != null
+      ? (mergeBranchScopeOnQuery(
+          baseOverdue,
+          params.branchScope,
+        ) as FilterQuery<IFee>)
+      : baseOverdue;
+
+  const tenantFees = await Fee.find(feeOverdueFilter)
+    .select("_id")
+    .lean()
+    .exec();
   const tenantFeeIds = tenantFees.map((f) => String(f._id));
   if (tenantFeeIds.length === 0) {
     return {
@@ -1234,7 +1301,7 @@ export async function listOverdueFees(
           .exec()
       : Promise.resolve([]),
     Fee.find({
-      tenantId,
+      ...feeOverdueFilter,
       isInstallment: false,
       pendingAmount: { $gt: 0 },
       paidAmount: 0,
@@ -1494,6 +1561,7 @@ export async function addInstallmentsToFee(
           installmentId: doc._id.toString(),
           amount: doc.paidAmount,
           recordedAt: doc.createdAt,
+          ...(fee.branchId ? { branchId: fee.branchId } : {}),
         });
       }
     }
@@ -1582,6 +1650,7 @@ export async function updateFee(
           feeId: fee._id.toString(),
           studentId: fee.studentId,
           amount: delta,
+          ...(fee.branchId ? { branchId: fee.branchId } : {}),
         });
       }
     }
@@ -1674,6 +1743,7 @@ export async function updateInstallment(
       studentId: fee.studentId,
       installmentId: refreshedInst._id.toString(),
       amount: deltaPaid,
+      ...(refreshedFee.branchId ? { branchId: refreshedFee.branchId } : {}),
     });
   }
 

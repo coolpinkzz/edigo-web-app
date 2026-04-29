@@ -1,11 +1,19 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
-export type FeeType = "TUITION" | "TRANSPORT" | "HOSTEL" | "OTHER";
+export type FeeType =
+  | "TUITION"
+  | "TRANSPORT"
+  | "HOSTEL"
+  | "ADMISSION"
+  | "RENEW"
+  | "OTHER";
 
 export const FEE_TYPES: FeeType[] = [
   "TUITION",
   "TRANSPORT",
   "HOSTEL",
+  "ADMISSION",
+  "RENEW",
   "OTHER",
 ];
 
@@ -24,6 +32,8 @@ export const FEE_SOURCES: FeeSource[] = ["TEMPLATE", "CUSTOM"];
 
 export interface IFee extends Document {
   tenantId: string;
+  /** Denormalized from student for queries; optional on legacy rows. */
+  branchId?: string;
   studentId: string;
 
   /** How this fee was created; fee data is always stored on the document (no live template link). */
@@ -60,6 +70,7 @@ export interface IFee extends Document {
 const FeeSchema = new Schema<IFee>(
   {
     tenantId: { type: String, required: true, index: true },
+    branchId: { type: String, trim: true, index: true, sparse: true },
     studentId: { type: String, required: true, index: true },
 
     source: {
@@ -114,6 +125,7 @@ const FeeSchema = new Schema<IFee>(
 FeeSchema.index({ tenantId: 1, studentId: 1 });
 FeeSchema.index({ tenantId: 1, status: 1 });
 FeeSchema.index({ tenantId: 1, feeType: 1 });
+FeeSchema.index({ tenantId: 1, branchId: 1 });
 FeeSchema.index({ tenantId: 1, templateId: 1 }, { sparse: true });
 /** One TEMPLATE fee per student per template (duplicate assignment guard). */
 FeeSchema.index(

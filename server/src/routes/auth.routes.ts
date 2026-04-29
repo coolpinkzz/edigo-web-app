@@ -11,10 +11,12 @@ import {
   passwordResetOtpVerifyRateLimit,
   passwordResetSubmitRateLimit,
 } from "../middleware/rate-limit.middleware";
+import { requireSignupApiKey } from "../middleware/signup-api-key.middleware";
 import { validate } from "../middleware/validate.middleware";
 import {
   createLinkedAccountBody,
   patchTenantBody,
+  presignTenantLogoBody,
   razorpayRouteSettlementsBody,
   requestPasswordResetOtpBody,
   verifyPasswordResetOtpBody,
@@ -34,7 +36,14 @@ const router = Router();
  *   post:
  *     tags: [Auth]
  *     summary: Register tenant and admin
- *     description: Creates a new tenant (organization) and the first TENANT_ADMIN user.
+ *     description: Creates a new tenant (organization) and the first TENANT_ADMIN user. When the server has SIGNUP_API_KEY set, send the same value in header X-Signup-Key.
+ *     parameters:
+ *       - in: header
+ *         name: X-Signup-Key
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Required when SIGNUP_API_KEY is configured on the server
  *     requestBody:
  *       required: true
  *       content:
@@ -72,6 +81,12 @@ const router = Router();
  *               $ref: '#/components/schemas/AuthSuccess'
  *       400:
  *         description: Validation or signup error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Signup key missing or wrong (when SIGNUP_API_KEY is set)
  *         content:
  *           application/json:
  *             schema:
@@ -306,7 +321,12 @@ const router = Router();
  */
 
 /** Public routes */
-router.post("/signup", signupRateLimit, authController.signup);
+router.post(
+  "/signup",
+  signupRateLimit,
+  requireSignupApiKey,
+  authController.signup,
+);
 router.post("/login", loginRateLimit, authController.login);
 
 router.post(
@@ -344,7 +364,12 @@ router.post(
   requireTenantAdmin,
   async (req, res) => {
     try {
-      const { phone, name, role } = req.body;
+      const { phone, name, role, branchIds } = req.body as {
+        phone?: string;
+        name?: string;
+        role?: Role;
+        branchIds?: string[];
+      };
       if (!phone || !name || !role) {
         res.status(400).json({ error: "phone, name, role are required" });
         return;
@@ -353,12 +378,23 @@ router.post(
         res.status(400).json({ error: "Invalid role" });
         return;
       }
+      if (
+        branchIds !== undefined &&
+        (!Array.isArray(branchIds) ||
+          !branchIds.every((id) => typeof id === "string" && id.length === 24))
+      ) {
+        res.status(400).json({
+          error: "branchIds must be an array of 24-char hex ids when provided",
+        });
+        return;
+      }
       const result = await authService.inviteUser({
         phone,
         name,
         role,
         tenantId: req.user!.tenantId,
         inviterUserId: req.user!.userId,
+        ...(branchIds?.length ? { branchIds } : {}),
       });
       res.status(201).json(result);
     } catch (err) {
@@ -374,7 +410,18 @@ router.get("/me", authenticate, (req, res) => {
   void authController.me(req, res);
 });
 
-/** Tenant admin: update organization display name */
+/** Tenant admin: presign org logo (S3 PUT) */
+router.post(
+  "/tenant/logo/presign",
+  authenticate,
+  requireTenantAdmin,
+  validate({ body: presignTenantLogoBody }),
+  (req, res) => {
+    void authController.presignTenantLogo(req, res);
+  },
+);
+
+/** Tenant admin: update organization display name and/or logo */
 router.patch(
   "/tenant",
   authenticate,

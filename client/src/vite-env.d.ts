@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_TENANT_ROOT_DOMAIN?: string
   /** Google Analytics 4 measurement ID (G-XXXXXXXXXX). Used on the marketing landing page only. */
   readonly VITE_GA_MEASUREMENT_ID?: string
+  /** Canonical site origin for SEO (no trailing slash), e.g. https://www.edigo.in — overrides inferred URL in JSON-LD and meta tags. */
+  readonly VITE_SITE_URL?: string
 }
 
 interface Window {

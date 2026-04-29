@@ -214,7 +214,7 @@ router.get(
  *       - in: query
  *         name: feeTypes
  *         schema: { type: string }
- *         description: Comma-separated — TUITION, TRANSPORT, HOSTEL, OTHER
+ *         description: Comma-separated — TUITION, TRANSPORT, HOSTEL, ADMISSION, RENEW, OTHER
  *       - in: query
  *         name: sortBy
  *         schema: { type: string, enum: [studentName, class, pendingTotal, createdAt], default: studentName }

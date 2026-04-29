@@ -10,6 +10,7 @@ export interface RecordManualPaymentCreditInput {
   feeId: string;
   studentId: string;
   installmentId?: string;
+  branchId?: string;
   /** Positive rupees credited toward paid balance. */
   amount: number;
   recordedAt?: Date;
@@ -26,7 +27,7 @@ export async function recordManualPaymentCredit(
   if (input.amount <= 0) {
     return;
   }
-  const doc = {
+  const doc: Record<string, unknown> = {
     tenantId: input.tenantId,
     feeId: input.feeId,
     studentId: input.studentId,
@@ -34,6 +35,9 @@ export async function recordManualPaymentCredit(
     amount: roundRupees(input.amount),
     recordedAt: input.recordedAt ?? new Date(),
   };
+  if (input.branchId) {
+    doc.branchId = input.branchId;
+  }
   if (input.session) {
     await ManualPaymentCredit.create([doc], { session: input.session });
   } else {
@@ -47,12 +51,18 @@ export async function sumManualCreditsRupees(
   from: Date,
   to: Date,
   endExclusive?: boolean,
+  /** When set, only credits tagged with these fee branch ids. */
+  branchFilterIds?: string[],
 ): Promise<number> {
   const recordedAt = endExclusive
     ? { $gte: from, $lt: to }
     : { $gte: from, $lte: to };
+  const baseMatch: Record<string, unknown> = { tenantId, recordedAt };
+  if (branchFilterIds?.length) {
+    baseMatch.branchId = { $in: branchFilterIds };
+  }
   const [row] = await ManualPaymentCredit.aggregate<{ total: number }>([
-    { $match: { tenantId, recordedAt } },
+    { $match: baseMatch },
     { $group: { _id: null, total: { $sum: "$amount" } } },
   ]).exec();
   return roundRupees(row?.total ?? 0);
@@ -62,9 +72,14 @@ export async function distinctStudentIdsWithManualCredits(
   tenantId: string,
   from: Date,
   to: Date,
+  branchFilterIds?: string[],
 ): Promise<string[]> {
-  return ManualPaymentCredit.distinct("studentId", {
+  const q: Record<string, unknown> = {
     tenantId,
     recordedAt: { $gte: from, $lte: to },
-  });
+  };
+  if (branchFilterIds?.length) {
+    q.branchId = { $in: branchFilterIds };
+  }
+  return ManualPaymentCredit.distinct("studentId", q);
 }

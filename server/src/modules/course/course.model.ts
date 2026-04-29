@@ -2,6 +2,8 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface ICourse extends Document {
   tenantId: string;
+  /** Optional: catalog entry scoped to a campus. */
+  branchId?: string;
   name: string;
   shortCode?: string;
   description?: string;
@@ -15,6 +17,7 @@ export interface ICourse extends Document {
 const CourseSchema = new Schema<ICourse>(
   {
     tenantId: { type: String, required: true, index: true },
+    branchId: { type: String, trim: true, index: true, sparse: true },
     name: { type: String, required: true, trim: true },
     shortCode: { type: String, trim: true },
     description: { type: String, trim: true },
@@ -26,6 +29,7 @@ const CourseSchema = new Schema<ICourse>(
 
 CourseSchema.index({ tenantId: 1, isActive: 1 });
 CourseSchema.index({ tenantId: 1, sortOrder: 1, name: 1 });
+CourseSchema.index({ tenantId: 1, branchId: 1 });
 
 export const Course: Model<ICourse> =
   mongoose.models.Course ?? mongoose.model<ICourse>("Course", CourseSchema);

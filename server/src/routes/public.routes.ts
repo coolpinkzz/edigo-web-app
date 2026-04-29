@@ -2,7 +2,20 @@ import { Router } from "express";
 import { postBookDemo } from "../modules/public/demo-request.controller";
 import { bookDemoBodySchema } from "../modules/public/demo-request.validation";
 import { validate } from "../middleware/validate.middleware";
-import { demoRequestRateLimit } from "../middleware/rate-limit.middleware";
+import {
+  demoRequestRateLimit,
+  quotationAcceptRateLimit,
+  quotationPdfPublicRateLimit,
+} from "../middleware/rate-limit.middleware";
+import {
+  downloadPdfByToken,
+  getCheckoutPage,
+  postAcceptQuotation,
+} from "../modules/quotation/quotation-public.controller";
+import {
+  quotationAcceptPublicBodySchema,
+  quotationIdParamsSchema,
+} from "../modules/quotation/quotation.validation";
 
 const router = Router();
 
@@ -43,6 +56,34 @@ router.post(
   demoRequestRateLimit,
   validate({ body: bookDemoBodySchema }),
   postBookDemo,
+);
+
+router.get(
+  "/quotations/:id/pdf",
+  quotationPdfPublicRateLimit,
+  validate({ params: quotationIdParamsSchema }),
+  downloadPdfByToken,
+);
+
+router.get(
+  "/quotations/:id/checkout",
+  quotationAcceptRateLimit,
+  validate({ params: quotationIdParamsSchema }),
+  (req, res) => {
+    void getCheckoutPage(req, res);
+  },
+);
+
+router.post(
+  "/quotations/:id/accept",
+  quotationAcceptRateLimit,
+  validate({
+    params: quotationIdParamsSchema,
+    body: quotationAcceptPublicBodySchema,
+  }),
+  (req, res) => {
+    void postAcceptQuotation(req, res);
+  },
 );
 
 export default router;

@@ -10,6 +10,8 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
 
 export interface IPayment extends Document {
   tenantId: string;
+  /** Denormalized from fee for analytics; optional on legacy rows. */
+  branchId?: string;
   studentId: string;
   feeId: string;
   /** Set when the fee uses installments; omitted for lump-sum fees. */
@@ -45,8 +47,11 @@ export interface IPayment extends Document {
   /** Optional failure / reconciliation notes */
   failureReason?: string;
 
-  /** Opaque token from reminder SMS (`GET /pay/:token`); not set for staff create-order. */
+  /** Opaque token from reminder SMS (`GET /pay/:token` or short `GET /p/:code`); not set for staff create-order. */
   payToken?: string;
+
+  /** When set, first successful capture marks this quotation ACCEPTED. */
+  quotationId?: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -55,6 +60,7 @@ export interface IPayment extends Document {
 const PaymentSchema = new Schema<IPayment>(
   {
     tenantId: { type: String, required: true, index: true },
+    branchId: { type: String, trim: true, index: true, sparse: true },
     studentId: { type: String, required: true, index: true },
     feeId: { type: String, required: true, index: true },
     installmentId: { type: String, trim: true, index: true, sparse: true },
@@ -86,6 +92,8 @@ const PaymentSchema = new Schema<IPayment>(
     failureReason: { type: String, trim: true },
 
     payToken: { type: String, trim: true, sparse: true, index: true },
+
+    quotationId: { type: String, trim: true, sparse: true, index: true },
   },
   { timestamps: true },
 );
@@ -93,6 +101,7 @@ const PaymentSchema = new Schema<IPayment>(
 PaymentSchema.index({ tenantId: 1, idempotencyKey: 1 }, { unique: true });
 PaymentSchema.index({ tenantId: 1, studentId: 1 });
 PaymentSchema.index({ tenantId: 1, feeId: 1 });
+PaymentSchema.index({ tenantId: 1, branchId: 1 });
 PaymentSchema.index({ razorpayPaymentLinkId: 1 }, { sparse: true, unique: true });
 PaymentSchema.index({ payToken: 1, status: 1 });
 

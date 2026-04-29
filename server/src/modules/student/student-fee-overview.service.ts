@@ -11,6 +11,10 @@ import {
   deriveFeeStatusFromInstallmentRows,
   serializeFee,
 } from "../fee/fee.service";
+import {
+  BranchScope,
+  mergeBranchScopeOnQuery,
+} from "../../types/branch-scope";
 import { IStudent, Student } from "./student.model";
 import { StudentClass, StudentSection, StudentStatus } from "./student.model";
 import {
@@ -73,6 +77,7 @@ export interface StudentFeeOverviewParams {
   feeTypes?: FeeType[];
   sortBy: StudentFeeOverviewSortBy;
   sortDir: "asc" | "desc";
+  branchScope?: BranchScope;
 }
 
 export interface StudentFeeOverviewRow {
@@ -132,7 +137,14 @@ export async function listStudentFeeOverview(
 ): Promise<PaginatedStudentFeeOverview> {
   const skip = (params.page - 1) * params.limit;
 
-  const studentMatch: Record<string, unknown> = { tenantId };
+  const baseMatch: Record<string, unknown> = { tenantId };
+  const studentMatch: Record<string, unknown> =
+    params.branchScope != null
+      ? (mergeBranchScopeOnQuery(
+          baseMatch,
+          params.branchScope,
+        ) as Record<string, unknown>)
+      : baseMatch;
   if (params.studentStatus !== undefined) {
     studentMatch.status = params.studentStatus;
   }

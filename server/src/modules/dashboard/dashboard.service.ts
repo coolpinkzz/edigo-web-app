@@ -54,6 +54,13 @@ export interface DashboardOverviewResult {
     /** Distinct students with ≥1 successful payment or manual credit in the selected period. */
     paidInPeriod: number;
   };
+  /**
+   * Outstanding amounts scheduled to be due in [from, to]: installment lines by `dueDate`,
+   * lump-sum fees by `endDate` (same inclusive range as overview period).
+   */
+  expectedCollectable: {
+    amount: number;
+  };
 }
 
 async function sumSuccessfulPaymentsPaise(
@@ -121,6 +128,86 @@ async function sumPendingFees(tenantId: string): Promise<number> {
   return row?.total ?? 0;
 }
 
+/**
+ * Sum of unpaid installment balances whose dueDate falls in the range (tenant, installment-backed fees only).
+ */
+async function sumInstallmentCollectableDueInRange(
+  tenantId: string,
+  from: Date,
+  to: Date,
+): Promise<number> {
+  const feeColl = Fee.collection.name;
+  const [row] = await Installment.aggregate<{ total: number }>([
+    {
+      $match: {
+        dueDate: { $gte: from, $lte: to },
+      },
+    },
+    {
+      $lookup: {
+        from: feeColl,
+        let: { fid: "$feeId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: [{ $toString: "$_id" }, "$$fid"] },
+            },
+          },
+          { $match: { tenantId, isInstallment: true } },
+          { $limit: 1 },
+        ],
+        as: "fee",
+      },
+    },
+    { $match: { "fee.0": { $exists: true } } },
+    {
+      $group: {
+        _id: null,
+        total: {
+          $sum: {
+            $max: [{ $subtract: ["$amount", "$paidAmount"] }, 0],
+          },
+        },
+      },
+    },
+  ]).exec();
+  return row?.total ?? 0;
+}
+
+/**
+ * Sum of pending balance for lump-sum fees whose endDate (due) falls in the range.
+ */
+async function sumLumpSumCollectableDueInRange(
+  tenantId: string,
+  from: Date,
+  to: Date,
+): Promise<number> {
+  const [row] = await Fee.aggregate<{ total: number }>([
+    {
+      $match: {
+        tenantId,
+        isInstallment: false,
+        endDate: { $gte: from, $lte: to },
+        pendingAmount: { $gt: 0 },
+      },
+    },
+    { $group: { _id: null, total: { $sum: "$pendingAmount" } } },
+  ]).exec();
+  return row?.total ?? 0;
+}
+
+async function sumExpectedCollectableInRange(
+  tenantId: string,
+  from: Date,
+  to: Date,
+): Promise<number> {
+  const [inst, lump] = await Promise.all([
+    sumInstallmentCollectableDueInRange(tenantId, from, to),
+    sumLumpSumCollectableDueInRange(tenantId, from, to),
+  ]);
+  return roundRupees(inst + lump);
+}
+
 export async function getDashboardOverview(
   params: DashboardOverviewParams,
 ): Promise<DashboardOverviewResult> {
@@ -128,13 +215,19 @@ export async function getDashboardOverview(
 
   const collected = await sumCollectedInRange(tenantId, from, to);
 
-  const [paidInPeriod, pendingSum, totalStudents, activeStudents] =
-    await Promise.all([
-      countDistinctPaidStudents(tenantId, from, to),
-      sumPendingFees(tenantId),
-      Student.countDocuments({ tenantId }).exec(),
-      Student.countDocuments({ tenantId, status: "ACTIVE" }).exec(),
-    ]);
+  const [
+    paidInPeriod,
+    pendingSum,
+    expectedCollectable,
+    totalStudents,
+    activeStudents,
+  ] = await Promise.all([
+    countDistinctPaidStudents(tenantId, from, to),
+    sumPendingFees(tenantId),
+    sumExpectedCollectableInRange(tenantId, from, to),
+    Student.countDocuments({ tenantId }).exec(),
+    Student.countDocuments({ tenantId, status: "ACTIVE" }).exec(),
+  ]);
 
   const result: DashboardOverviewResult = {
     period: { from: from.toISOString(), to: to.toISOString() },
@@ -144,6 +237,7 @@ export async function getDashboardOverview(
       manualAmount: collected.manualAmount,
     },
     pending: { amount: roundRupees(pendingSum) },
+    expectedCollectable: { amount: expectedCollectable },
     students: {
       total: totalStudents,
       active: activeStudents,
@@ -205,9 +299,7 @@ export interface RevenueTrendResult {
   points: RevenueTrendPoint[];
 }
 
-function mongoTruncUnit(
-  g: TrendGranularity,
-): "day" | "week" | "month" {
+function mongoTruncUnit(g: TrendGranularity): "day" | "week" | "month" {
   if (g === "daily") return "day";
   if (g === "weekly") return "week";
   return "month";
@@ -276,11 +368,7 @@ function formatTrendLabel(periodStart: Date, g: TrendGranularity): string {
   }).format(periodStart);
 }
 
-function iterBucketStarts(
-  from: Date,
-  to: Date,
-  g: TrendGranularity,
-): Date[] {
+function iterBucketStarts(from: Date, to: Date, g: TrendGranularity): Date[] {
   const out: Date[] = [];
   let cur = truncateUtc(from, g);
   const end = truncateUtc(to, g);
@@ -494,9 +582,7 @@ async function getCoursePerformanceForAcademy(
     const totalAmount = roundRupees(r.totalAmount);
     const paidAmount = roundRupees(r.paidAmount);
     const percentCollected =
-      totalAmount > 0
-        ? roundRupees((paidAmount / totalAmount) * 100)
-        : 0;
+      totalAmount > 0 ? roundRupees((paidAmount / totalAmount) * 100) : 0;
 
     if (id === "") {
       return {
@@ -589,9 +675,7 @@ export async function getClassPerformance(
     const totalAmount = v?.totalAmount ?? 0;
     const paidAmount = v?.paidAmount ?? 0;
     const percentCollected =
-      totalAmount > 0
-        ? roundRupees((paidAmount / totalAmount) * 100)
-        : 0;
+      totalAmount > 0 ? roundRupees((paidAmount / totalAmount) * 100) : 0;
     return {
       className,
       totalAmount,

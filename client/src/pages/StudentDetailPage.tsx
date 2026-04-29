@@ -158,6 +158,16 @@ export function StudentDetailPage() {
   const updateFeePaymentMutation = useUpdateFeePayment();
   const patchFeeMutation = usePatchFee();
 
+  useEffect(() => {
+    if (!feesQuery.isSuccess) return;
+    const pageRows = feesQuery.data?.data;
+    if (!pageRows?.length) {
+      setExpandedFeeId(null);
+      return;
+    }
+    setExpandedFeeId(pageRows[0].id);
+  }, [studentId, feePage, feesQuery.isSuccess]);
+
   const toggleFee = (id: string) => {
     setExpandedFeeId((prev) => (prev === id ? null : id));
     setRecordingInstallmentId(null);
@@ -413,13 +423,566 @@ export function StudentDetailPage() {
           </div>
         </div>
 
-        <div className="px-5 py-6 sm:px-7">
+        <div className="border-t border-border">
+          <div className="border-b border-border bg-muted/15 px-5 py-5 sm:px-7">
+            <CardTitle className="text-lg font-semibold tracking-tight">
+              Fees
+            </CardTitle>
+            <CardDescription className="mt-1 text-muted-foreground">
+              Expand a fee to set due dates (lump-sum), record cash/cheque
+              payments on installments, or a single lump-sum payment.
+            </CardDescription>
+          </div>
+
+          {feesQuery.isLoading && (
+            <p className="px-5 py-8 text-sm text-muted-foreground sm:px-7">
+              Loading fees…
+            </p>
+          )}
+
+          {feesQuery.isError && (
+            <p className="px-5 py-8 text-sm text-red-600 sm:px-7" role="alert">
+              Failed to load fees.
+            </p>
+          )}
+
+          {!feesQuery.isLoading &&
+            !feesQuery.isError &&
+            feesData &&
+            feesData.data.length === 0 && (
+              <p className="px-5 py-10 text-center text-sm text-muted-foreground sm:px-7">
+                No fees recorded for this student yet.
+              </p>
+            )}
+
+          {!feesQuery.isLoading &&
+            !feesQuery.isError &&
+            feesData &&
+            feesData.data.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[36rem] text-left text-sm">
+                  <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
+                    <tr>
+                      <th className="w-10 px-4 py-3" aria-hidden />
+                      <th className="px-4 py-3 font-medium">Title</th>
+                      <th className="px-4 py-3 font-medium">Type</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium text-right">
+                        Total
+                      </th>
+                      <th className="px-4 py-3 font-medium text-right">Paid</th>
+                      <th className="px-4 py-3 font-medium text-right">
+                        Pending
+                      </th>
+                      <th className="px-4 py-3 font-medium">Due by</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {feesData.data.map((fee) => {
+                      const isOpen = expandedFeeId === fee.id;
+                      const detailFee =
+                        isOpen &&
+                        feeDetailQuery.data?.fee?.id === fee.id &&
+                        feeDetailQuery.data.fee
+                          ? feeDetailQuery.data.fee
+                          : null;
+                      const parentStatus = detailFee?.status ?? fee.status;
+                      return (
+                        <Fragment key={fee.id}>
+                          <tr
+                            className={cn(
+                              "cursor-pointer bg-card hover:bg-muted/80",
+                              isOpen && "bg-primary/10",
+                            )}
+                            onClick={() => toggleFee(fee.id)}
+                          >
+                            <td
+                              className="px-4 py-3 text-muted-foreground"
+                              aria-hidden
+                            >
+                              <span className="inline-block w-4 text-center">
+                                {isOpen ? "▼" : "▶"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium text-foreground">
+                              {fee.title}
+                              {fee.isInstallment && (
+                                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                  (installment plan)
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {fee.feeType}
+                            </td>
+                            <td className="px-4 py-3">
+                              <FeeStatusBadge
+                                status={parentStatus}
+                                variant="compact"
+                                className="text-xs"
+                              >
+                                {parentStatus}
+                              </FeeStatusBadge>
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                              {formatMoney(fee.totalAmount)}
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums text-foreground/80">
+                              {formatMoney(fee.paidAmount)}
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums text-foreground/80">
+                              {formatMoney(fee.pendingAmount)}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {fee.isInstallment
+                                ? "—"
+                                : fee.endDate
+                                  ? formatDate(fee.endDate)
+                                  : "—"}
+                            </td>
+                          </tr>
+                          {isOpen && (
+                            <tr>
+                              <td colSpan={8} className="px-4 py-4">
+                                {feeDetailQuery.isLoading && (
+                                  <p className="text-sm text-muted-foreground">
+                                    Loading installments…
+                                  </p>
+                                )}
+                                {feeDetailQuery.isError && (
+                                  <p
+                                    className="text-sm text-red-600"
+                                    role="alert"
+                                  >
+                                    Could not load fee details.
+                                  </p>
+                                )}
+                                {feeDetailQuery.data && (
+                                  <div className="space-y-4">
+                                    {!feeDetailQuery.data.fee.isInstallment && (
+                                      <div className="rounded-lg border border-card-border p-4 shadow-md shadow-black/[0.06]">
+                                        <p className="text-sm text-muted-foreground">
+                                          Single payment — no installment
+                                          schedule.
+                                        </p>
+                                        <p className="mt-2 text-sm text-foreground/80">
+                                          Total{" "}
+                                          {formatMoney(
+                                            feeDetailQuery.data.fee.totalAmount,
+                                          )}{" "}
+                                          · Paid{" "}
+                                          {formatMoney(
+                                            feeDetailQuery.data.fee.paidAmount,
+                                          )}{" "}
+                                          · Pending{" "}
+                                          {formatMoney(
+                                            feeDetailQuery.data.fee
+                                              .pendingAmount,
+                                          )}
+                                        </p>
+                                        <div
+                                          className="mt-4 space-y-3 border-t border-border/60 pt-4"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <p className="text-xs text-muted-foreground">
+                                            <strong className="font-medium text-foreground/90">
+                                              Due date (IST)
+                                            </strong>
+                                            {" — "}
+                                            Only applies to lump-sum fees. For
+                                            unpaid fees, status becomes overdue
+                                            after this date. Installment fees
+                                            use installment due dates instead.
+                                          </p>
+                                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                                            <div className="sm:w-56">
+                                              <Input
+                                                type="date"
+                                                label="Due date (optional)"
+                                                value={lumpScheduleEnd}
+                                                onChange={(e) =>
+                                                  setLumpScheduleEnd(
+                                                    e.target.value,
+                                                  )
+                                                }
+                                              />
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="secondary"
+                                              className="sm:mb-0 sm:shrink-0"
+                                              disabled={
+                                                patchFeeMutation.isPending
+                                              }
+                                              onClick={() =>
+                                                void submitLumpSchedule(
+                                                  feeDetailQuery.data.fee,
+                                                )
+                                              }
+                                            >
+                                              {patchFeeMutation.isPending
+                                                ? "Saving…"
+                                                : "Save schedule"}
+                                            </Button>
+                                          </div>
+                                          {patchFeeMutation.isError &&
+                                            patchFeeMutation.error && (
+                                              <p
+                                                className="text-sm text-red-600"
+                                                role="alert"
+                                              >
+                                                {getErrorMessage(
+                                                  patchFeeMutation.error,
+                                                )}
+                                              </p>
+                                            )}
+                                        </div>
+                                        {!showLumpSumForm ? (
+                                          <Button
+                                            type="button"
+                                            variant="primary"
+                                            className="mt-3"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openLumpSumForm(
+                                                feeDetailQuery.data.fee,
+                                              );
+                                            }}
+                                          >
+                                            Record payment
+                                          </Button>
+                                        ) : (
+                                          <div
+                                            className="mt-4 space-y-3 border-t border-border/60 pt-4"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <Input
+                                              label="Total amount recorded as paid"
+                                              type="number"
+                                              step="0.01"
+                                              min={0}
+                                              value={lumpPaidInput}
+                                              onChange={(e) =>
+                                                setLumpPaidInput(e.target.value)
+                                              }
+                                            />
+                                            <SelectField
+                                              label="Method"
+                                              name="lump-method"
+                                              options={PAYMENT_METHOD_OPTIONS.map(
+                                                (o) => ({
+                                                  value: o.value,
+                                                  label: o.label,
+                                                }),
+                                              )}
+                                              value={lumpMethod}
+                                              onValueChange={(v) =>
+                                                setLumpMethod(
+                                                  v as ManualPaymentMethod,
+                                                )
+                                              }
+                                            />
+                                            <Input
+                                              label="Reference"
+                                              placeholder="Cheque no. / receipt"
+                                              required
+                                              value={lumpReference}
+                                              onChange={(e) =>
+                                                setLumpReference(e.target.value)
+                                              }
+                                            />
+                                            <div className="flex flex-wrap gap-2">
+                                              <Button
+                                                type="button"
+                                                disabled={
+                                                  updateFeePaymentMutation.isPending
+                                                }
+                                                onClick={() =>
+                                                  void submitLumpSumPayment(
+                                                    feeDetailQuery.data!.fee,
+                                                  )
+                                                }
+                                              >
+                                                {updateFeePaymentMutation.isPending
+                                                  ? "Saving…"
+                                                  : "Save payment"}
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={() =>
+                                                  setShowLumpSumForm(false)
+                                                }
+                                              >
+                                                Cancel
+                                              </Button>
+                                            </div>
+                                            {updateFeePaymentMutation.isError &&
+                                              updateFeePaymentMutation.error && (
+                                                <p
+                                                  className="text-sm text-red-600"
+                                                  role="alert"
+                                                >
+                                                  {getErrorMessage(
+                                                    updateFeePaymentMutation.error,
+                                                  )}
+                                                </p>
+                                              )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {feeDetailQuery.data.fee.isInstallment &&
+                                      feeDetailQuery.data.installments
+                                        .length === 0 && (
+                                        <p className="text-sm text-muted-foreground">
+                                          No installment rows yet.
+                                        </p>
+                                      )}
+                                    {feeDetailQuery.data.installments.length >
+                                      0 && (
+                                      <div className="overflow-x-auto rounded-lg border border-card-border bg-card shadow-md shadow-black/[0.06]">
+                                        <table className="w-full min-w-[36rem] text-left text-sm">
+                                          <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
+                                            <tr>
+                                              <th className="px-4 py-2 font-medium">
+                                                #
+                                              </th>
+                                              <th className="px-4 py-2 font-medium">
+                                                Due
+                                              </th>
+                                              <th className="px-4 py-2 font-medium text-right">
+                                                Amount
+                                              </th>
+                                              <th className="px-4 py-2 font-medium text-right">
+                                                Paid
+                                              </th>
+                                              <th className="px-4 py-2 font-medium">
+                                                Status
+                                              </th>
+                                              <th className="px-4 py-2 font-medium text-right">
+                                                Payment
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-border/60">
+                                            {feeDetailQuery.data.installments.map(
+                                              (inst, idx) => (
+                                                <Fragment key={inst.id}>
+                                                  <tr>
+                                                    <td className="px-4 py-2 text-muted-foreground">
+                                                      {idx + 1}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-foreground">
+                                                      {formatDate(inst.dueDate)}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right tabular-nums">
+                                                      {formatMoney(inst.amount)}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right tabular-nums">
+                                                      {formatMoney(
+                                                        inst.paidAmount,
+                                                      )}
+                                                    </td>
+                                                    <td className="px-4 py-2">
+                                                      <FeeStatusBadge
+                                                        status={inst.status}
+                                                        variant="compact"
+                                                        className="text-xs"
+                                                      >
+                                                        {inst.status}
+                                                      </FeeStatusBadge>
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right">
+                                                      <button
+                                                        type="button"
+                                                        className="text-sm font-medium text-primary hover:underline"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          openInstallmentPayment(
+                                                            inst,
+                                                          );
+                                                        }}
+                                                      >
+                                                        Record
+                                                      </button>
+                                                    </td>
+                                                  </tr>
+                                                  {recordingInstallmentId ===
+                                                    inst.id && (
+                                                    <tr>
+                                                      <td
+                                                        colSpan={6}
+                                                        className="px-4 py-4"
+                                                        onClick={(e) =>
+                                                          e.stopPropagation()
+                                                        }
+                                                      >
+                                                        <div className="mx-auto max-w-md space-y-3">
+                                                          <p className="text-xs text-muted-foreground">
+                                                            Enter total
+                                                            collected for this
+                                                            installment (max{" "}
+                                                            {formatMoney(
+                                                              inst.amount,
+                                                            )}
+                                                            ).
+                                                          </p>
+                                                          <Input
+                                                            label="Amount recorded as paid"
+                                                            type="number"
+                                                            step="0.01"
+                                                            min={0}
+                                                            value={
+                                                              instPaidInput
+                                                            }
+                                                            onChange={(e) =>
+                                                              setInstPaidInput(
+                                                                e.target.value,
+                                                              )
+                                                            }
+                                                          />
+                                                          <SelectField
+                                                            label="Method"
+                                                            name={`inst-method-${inst.id}`}
+                                                            options={PAYMENT_METHOD_OPTIONS.map(
+                                                              (o) => ({
+                                                                value: o.value,
+                                                                label: o.label,
+                                                              }),
+                                                            )}
+                                                            value={instMethod}
+                                                            onValueChange={(
+                                                              v,
+                                                            ) =>
+                                                              setInstMethod(
+                                                                v as ManualPaymentMethod,
+                                                              )
+                                                            }
+                                                          />
+                                                          <Input
+                                                            label="Reference"
+                                                            placeholder="Cheque no. / receipt"
+                                                            required
+                                                            value={
+                                                              instReference
+                                                            }
+                                                            onChange={(e) =>
+                                                              setInstReference(
+                                                                e.target.value,
+                                                              )
+                                                            }
+                                                          />
+                                                          <div className="flex flex-wrap gap-2">
+                                                            <Button
+                                                              type="button"
+                                                              disabled={
+                                                                updateInstallmentMutation.isPending
+                                                              }
+                                                              onClick={() =>
+                                                                void submitInstallmentPayment(
+                                                                  feeDetailQuery
+                                                                    .data!.fee
+                                                                    .id,
+                                                                  inst,
+                                                                )
+                                                              }
+                                                            >
+                                                              {updateInstallmentMutation.isPending
+                                                                ? "Saving…"
+                                                                : "Save"}
+                                                            </Button>
+                                                            <Button
+                                                              type="button"
+                                                              variant="ghost"
+                                                              onClick={() =>
+                                                                setRecordingInstallmentId(
+                                                                  null,
+                                                                )
+                                                              }
+                                                            >
+                                                              Cancel
+                                                            </Button>
+                                                          </div>
+                                                          {updateInstallmentMutation.isError &&
+                                                            updateInstallmentMutation.error && (
+                                                              <p
+                                                                className="text-sm text-red-600"
+                                                                role="alert"
+                                                              >
+                                                                {getErrorMessage(
+                                                                  updateInstallmentMutation.error,
+                                                                )}
+                                                              </p>
+                                                            )}
+                                                        </div>
+                                                      </td>
+                                                    </tr>
+                                                  )}
+                                                </Fragment>
+                                              ),
+                                            )}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+          {!feesQuery.isLoading && feesData && feePages > 1 && (
+            <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/10 px-5 py-4 sm:px-7">
+              <p className="text-sm text-muted-foreground">
+                Page {feesData.page} of {feePages} · {feesData.total} fee
+                {feesData.total === 1 ? "" : "s"}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={feePage <= 1}
+                  onClick={() => {
+                    setExpandedFeeId(null);
+                    setFeePage((p) => Math.max(1, p - 1));
+                  }}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={feePage >= feePages}
+                  onClick={() => {
+                    setExpandedFeeId(null);
+                    setFeePage((p) => (p < feePages ? p + 1 : p));
+                  }}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-border px-5 py-6 sm:px-7">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Profile
           </h2>
           <div className="mt-4 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
             <DetailField label="Date of birth">
               {formatStudentDateOnly(student.dateOfBirth)}
+            </DetailField>
+            <DetailField label="Age">
+              {student.age != null ? String(student.age) : "—"}
             </DetailField>
             <DetailField label="Gender">
               {genderLabel(student.gender)}
@@ -475,553 +1038,13 @@ export function StudentDetailPage() {
                 {student.parentPhoneNumber}
               </span>
             </DetailField>
-            <DetailField label="Alternate phone">
+            <DetailField label="Emergency Contact">
               <span className="font-mono tabular-nums tracking-tight">
                 {student.alternatePhone?.trim() ? student.alternatePhone : "—"}
               </span>
             </DetailField>
           </div>
         </div>
-      </Card>
-
-      <Card className="overflow-hidden border-border/90 shadow-sm">
-        <div className="border-b border-border bg-muted/15 px-5 py-5 sm:px-7">
-          <CardTitle className="text-lg font-semibold tracking-tight">
-            Fees
-          </CardTitle>
-          <CardDescription className="mt-1 text-muted-foreground">
-            Expand a fee to set due dates (lump-sum), record cash/cheque
-            payments on installments, or a single lump-sum payment.
-          </CardDescription>
-        </div>
-
-        {feesQuery.isLoading && (
-          <p className="px-5 py-8 text-sm text-muted-foreground sm:px-7">
-            Loading fees…
-          </p>
-        )}
-
-        {feesQuery.isError && (
-          <p className="px-5 py-8 text-sm text-red-600 sm:px-7" role="alert">
-            Failed to load fees.
-          </p>
-        )}
-
-        {!feesQuery.isLoading &&
-          !feesQuery.isError &&
-          feesData &&
-          feesData.data.length === 0 && (
-            <p className="px-5 py-10 text-center text-sm text-muted-foreground sm:px-7">
-              No fees recorded for this student yet.
-            </p>
-          )}
-
-        {!feesQuery.isLoading &&
-          !feesQuery.isError &&
-          feesData &&
-          feesData.data.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[36rem] text-left text-sm">
-                <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
-                  <tr>
-                    <th className="w-10 px-4 py-3" aria-hidden />
-                    <th className="px-4 py-3 font-medium">Title</th>
-                    <th className="px-4 py-3 font-medium">Type</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium text-right">Total</th>
-                    <th className="px-4 py-3 font-medium text-right">Paid</th>
-                    <th className="px-4 py-3 font-medium text-right">
-                      Pending
-                    </th>
-                    <th className="px-4 py-3 font-medium">Due by</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {feesData.data.map((fee) => {
-                    const isOpen = expandedFeeId === fee.id;
-                    const detailFee =
-                      isOpen &&
-                      feeDetailQuery.data?.fee?.id === fee.id &&
-                      feeDetailQuery.data.fee
-                        ? feeDetailQuery.data.fee
-                        : null;
-                    const parentStatus = detailFee?.status ?? fee.status;
-                    return (
-                      <Fragment key={fee.id}>
-                        <tr
-                          className={cn(
-                            "cursor-pointer bg-card hover:bg-muted/80",
-                            isOpen && "bg-primary/10",
-                          )}
-                          onClick={() => toggleFee(fee.id)}
-                        >
-                          <td
-                            className="px-4 py-3 text-muted-foreground"
-                            aria-hidden
-                          >
-                            <span className="inline-block w-4 text-center">
-                              {isOpen ? "▼" : "▶"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-medium text-foreground">
-                            {fee.title}
-                            {fee.isInstallment && (
-                              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                (installment plan)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                            {fee.feeType}
-                          </td>
-                          <td className="px-4 py-3">
-                            <FeeStatusBadge
-                              status={parentStatus}
-                              variant="compact"
-                              className="text-xs"
-                            >
-                              {parentStatus}
-                            </FeeStatusBadge>
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                            {formatMoney(fee.totalAmount)}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums text-foreground/80">
-                            {formatMoney(fee.paidAmount)}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums text-foreground/80">
-                            {formatMoney(fee.pendingAmount)}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                            {fee.isInstallment
-                              ? "—"
-                              : fee.endDate
-                                ? formatDate(fee.endDate)
-                                : "—"}
-                          </td>
-                        </tr>
-                        {isOpen && (
-                          <tr>
-                            <td colSpan={8} className="px-4 py-4">
-                              {feeDetailQuery.isLoading && (
-                                <p className="text-sm text-muted-foreground">
-                                  Loading installments…
-                                </p>
-                              )}
-                              {feeDetailQuery.isError && (
-                                <p
-                                  className="text-sm text-red-600"
-                                  role="alert"
-                                >
-                                  Could not load fee details.
-                                </p>
-                              )}
-                              {feeDetailQuery.data && (
-                                <div className="space-y-4">
-                                  {!feeDetailQuery.data.fee.isInstallment && (
-                                    <div className="rounded-lg border border-card-border p-4 shadow-md shadow-black/[0.06]">
-                                      <p className="text-sm text-muted-foreground">
-                                        Single payment — no installment
-                                        schedule.
-                                      </p>
-                                      <p className="mt-2 text-sm text-foreground/80">
-                                        Total{" "}
-                                        {formatMoney(
-                                          feeDetailQuery.data.fee.totalAmount,
-                                        )}{" "}
-                                        · Paid{" "}
-                                        {formatMoney(
-                                          feeDetailQuery.data.fee.paidAmount,
-                                        )}{" "}
-                                        · Pending{" "}
-                                        {formatMoney(
-                                          feeDetailQuery.data.fee.pendingAmount,
-                                        )}
-                                      </p>
-                                      <div
-                                        className="mt-4 space-y-3 border-t border-border/60 pt-4"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <p className="text-xs text-muted-foreground">
-                                          <strong className="font-medium text-foreground/90">
-                                            Due date (IST)
-                                          </strong>
-                                          {" — "}
-                                          Only applies to lump-sum fees. For
-                                          unpaid fees, status becomes overdue
-                                          after this date. Installment fees use
-                                          installment due dates instead.
-                                        </p>
-                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                                          <div className="sm:w-56">
-                                            <Input
-                                              type="date"
-                                              label="Due date (optional)"
-                                              value={lumpScheduleEnd}
-                                              onChange={(e) =>
-                                                setLumpScheduleEnd(
-                                                  e.target.value,
-                                                )
-                                              }
-                                            />
-                                          </div>
-                                          <Button
-                                            type="button"
-                                            variant="secondary"
-                                            className="sm:mb-0 sm:shrink-0"
-                                            disabled={
-                                              patchFeeMutation.isPending
-                                            }
-                                            onClick={() =>
-                                              void submitLumpSchedule(
-                                                feeDetailQuery.data.fee,
-                                              )
-                                            }
-                                          >
-                                            {patchFeeMutation.isPending
-                                              ? "Saving…"
-                                              : "Save schedule"}
-                                          </Button>
-                                        </div>
-                                        {patchFeeMutation.isError &&
-                                          patchFeeMutation.error && (
-                                            <p
-                                              className="text-sm text-red-600"
-                                              role="alert"
-                                            >
-                                              {getErrorMessage(
-                                                patchFeeMutation.error,
-                                              )}
-                                            </p>
-                                          )}
-                                      </div>
-                                      {!showLumpSumForm ? (
-                                        <Button
-                                          type="button"
-                                          variant="primary"
-                                          className="mt-3"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            openLumpSumForm(
-                                              feeDetailQuery.data.fee,
-                                            );
-                                          }}
-                                        >
-                                          Record payment
-                                        </Button>
-                                      ) : (
-                                        <div
-                                          className="mt-4 space-y-3 border-t border-border/60 pt-4"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <Input
-                                            label="Total amount recorded as paid"
-                                            type="number"
-                                            step="0.01"
-                                            min={0}
-                                            value={lumpPaidInput}
-                                            onChange={(e) =>
-                                              setLumpPaidInput(e.target.value)
-                                            }
-                                          />
-                                          <SelectField
-                                            label="Method"
-                                            name="lump-method"
-                                            options={PAYMENT_METHOD_OPTIONS.map(
-                                              (o) => ({
-                                                value: o.value,
-                                                label: o.label,
-                                              }),
-                                            )}
-                                            value={lumpMethod}
-                                            onValueChange={(v) =>
-                                              setLumpMethod(
-                                                v as ManualPaymentMethod,
-                                              )
-                                            }
-                                          />
-                                          <Input
-                                            label="Reference"
-                                            placeholder="Cheque no. / receipt"
-                                            required
-                                            value={lumpReference}
-                                            onChange={(e) =>
-                                              setLumpReference(e.target.value)
-                                            }
-                                          />
-                                          <div className="flex flex-wrap gap-2">
-                                            <Button
-                                              type="button"
-                                              disabled={
-                                                updateFeePaymentMutation.isPending
-                                              }
-                                              onClick={() =>
-                                                void submitLumpSumPayment(
-                                                  feeDetailQuery.data!.fee,
-                                                )
-                                              }
-                                            >
-                                              {updateFeePaymentMutation.isPending
-                                                ? "Saving…"
-                                                : "Save payment"}
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              onClick={() =>
-                                                setShowLumpSumForm(false)
-                                              }
-                                            >
-                                              Cancel
-                                            </Button>
-                                          </div>
-                                          {updateFeePaymentMutation.isError &&
-                                            updateFeePaymentMutation.error && (
-                                              <p
-                                                className="text-sm text-red-600"
-                                                role="alert"
-                                              >
-                                                {getErrorMessage(
-                                                  updateFeePaymentMutation.error,
-                                                )}
-                                              </p>
-                                            )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  {feeDetailQuery.data.fee.isInstallment &&
-                                    feeDetailQuery.data.installments.length ===
-                                      0 && (
-                                      <p className="text-sm text-muted-foreground">
-                                        No installment rows yet.
-                                      </p>
-                                    )}
-                                  {feeDetailQuery.data.installments.length >
-                                    0 && (
-                                    <div className="overflow-x-auto rounded-lg border border-card-border bg-card shadow-md shadow-black/[0.06]">
-                                      <table className="w-full min-w-[36rem] text-left text-sm">
-                                        <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
-                                          <tr>
-                                            <th className="px-4 py-2 font-medium">
-                                              #
-                                            </th>
-                                            <th className="px-4 py-2 font-medium">
-                                              Due
-                                            </th>
-                                            <th className="px-4 py-2 font-medium text-right">
-                                              Amount
-                                            </th>
-                                            <th className="px-4 py-2 font-medium text-right">
-                                              Paid
-                                            </th>
-                                            <th className="px-4 py-2 font-medium">
-                                              Status
-                                            </th>
-                                            <th className="px-4 py-2 font-medium text-right">
-                                              Payment
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border/60">
-                                          {feeDetailQuery.data.installments.map(
-                                            (inst, idx) => (
-                                              <Fragment key={inst.id}>
-                                                <tr>
-                                                  <td className="px-4 py-2 text-muted-foreground">
-                                                    {idx + 1}
-                                                  </td>
-                                                  <td className="px-4 py-2 text-foreground">
-                                                    {formatDate(inst.dueDate)}
-                                                  </td>
-                                                  <td className="px-4 py-2 text-right tabular-nums">
-                                                    {formatMoney(inst.amount)}
-                                                  </td>
-                                                  <td className="px-4 py-2 text-right tabular-nums">
-                                                    {formatMoney(
-                                                      inst.paidAmount,
-                                                    )}
-                                                  </td>
-                                                  <td className="px-4 py-2">
-                                                    <FeeStatusBadge
-                                                      status={inst.status}
-                                                      variant="compact"
-                                                      className="text-xs"
-                                                    >
-                                                      {inst.status}
-                                                    </FeeStatusBadge>
-                                                  </td>
-                                                  <td className="px-4 py-2 text-right">
-                                                    <button
-                                                      type="button"
-                                                      className="text-sm font-medium text-primary hover:underline"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        openInstallmentPayment(
-                                                          inst,
-                                                        );
-                                                      }}
-                                                    >
-                                                      Record
-                                                    </button>
-                                                  </td>
-                                                </tr>
-                                                {recordingInstallmentId ===
-                                                  inst.id && (
-                                                  <tr>
-                                                    <td
-                                                      colSpan={6}
-                                                      className="px-4 py-4"
-                                                      onClick={(e) =>
-                                                        e.stopPropagation()
-                                                      }
-                                                    >
-                                                      <div className="mx-auto max-w-md space-y-3">
-                                                        <p className="text-xs text-muted-foreground">
-                                                          Enter total collected
-                                                          for this installment
-                                                          (max{" "}
-                                                          {formatMoney(
-                                                            inst.amount,
-                                                          )}
-                                                          ).
-                                                        </p>
-                                                        <Input
-                                                          label="Amount recorded as paid"
-                                                          type="number"
-                                                          step="0.01"
-                                                          min={0}
-                                                          value={instPaidInput}
-                                                          onChange={(e) =>
-                                                            setInstPaidInput(
-                                                              e.target.value,
-                                                            )
-                                                          }
-                                                        />
-                                                        <SelectField
-                                                          label="Method"
-                                                          name={`inst-method-${inst.id}`}
-                                                          options={PAYMENT_METHOD_OPTIONS.map(
-                                                            (o) => ({
-                                                              value: o.value,
-                                                              label: o.label,
-                                                            }),
-                                                          )}
-                                                          value={instMethod}
-                                                          onValueChange={(v) =>
-                                                            setInstMethod(
-                                                              v as ManualPaymentMethod,
-                                                            )
-                                                          }
-                                                        />
-                                                        <Input
-                                                          label="Reference"
-                                                          placeholder="Cheque no. / receipt"
-                                                          required
-                                                          value={instReference}
-                                                          onChange={(e) =>
-                                                            setInstReference(
-                                                              e.target.value,
-                                                            )
-                                                          }
-                                                        />
-                                                        <div className="flex flex-wrap gap-2">
-                                                          <Button
-                                                            type="button"
-                                                            disabled={
-                                                              updateInstallmentMutation.isPending
-                                                            }
-                                                            onClick={() =>
-                                                              void submitInstallmentPayment(
-                                                                feeDetailQuery
-                                                                  .data!.fee.id,
-                                                                inst,
-                                                              )
-                                                            }
-                                                          >
-                                                            {updateInstallmentMutation.isPending
-                                                              ? "Saving…"
-                                                              : "Save"}
-                                                          </Button>
-                                                          <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            onClick={() =>
-                                                              setRecordingInstallmentId(
-                                                                null,
-                                                              )
-                                                            }
-                                                          >
-                                                            Cancel
-                                                          </Button>
-                                                        </div>
-                                                        {updateInstallmentMutation.isError &&
-                                                          updateInstallmentMutation.error && (
-                                                            <p
-                                                              className="text-sm text-red-600"
-                                                              role="alert"
-                                                            >
-                                                              {getErrorMessage(
-                                                                updateInstallmentMutation.error,
-                                                              )}
-                                                            </p>
-                                                          )}
-                                                      </div>
-                                                    </td>
-                                                  </tr>
-                                                )}
-                                              </Fragment>
-                                            ),
-                                          )}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-        {!feesQuery.isLoading && feesData && feePages > 1 && (
-          <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/10 px-5 py-4 sm:px-7">
-            <p className="text-sm text-muted-foreground">
-              Page {feesData.page} of {feePages} · {feesData.total} fee
-              {feesData.total === 1 ? "" : "s"}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={feePage <= 1}
-                onClick={() => {
-                  setExpandedFeeId(null);
-                  setFeePage((p) => Math.max(1, p - 1));
-                }}
-              >
-                Previous
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={feePage >= feePages}
-                onClick={() => {
-                  setExpandedFeeId(null);
-                  setFeePage((p) => (p < feePages ? p + 1 : p));
-                }}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
       </Card>
 
       <ConfirmationModal

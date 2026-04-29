@@ -1,6 +1,5 @@
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -12,7 +11,6 @@ import type { RevenueTrendDto } from '../../types'
 import { cn, formatInr, formatInrTooltip } from '../../utils'
 
 const collectedStroke = 'var(--color-primary)'
-const dueStroke = '#d97706'
 
 type TooltipPayload = {
   dataKey?: string
@@ -42,11 +40,7 @@ function TrendTooltip({
               style={{ backgroundColor: p.color }}
               aria-hidden
             />
-            <span className="text-muted-foreground">
-              {p.name === 'Collected' || p.dataKey === 'collected'
-                ? 'Collected'
-                : 'Due (scheduled)'}
-            </span>
+            <span className="text-muted-foreground">Collected</span>
             <span className="ml-auto font-medium tabular-nums text-foreground">
               {formatInrTooltip(Number(p.value ?? 0))}
             </span>
@@ -72,7 +66,6 @@ export function RevenueTrendChart({
     data?.points.map((p) => ({
       label: p.label,
       collected: p.collected,
-      due: p.due,
     })) ?? []
 
   if (errorMessage) {
@@ -127,21 +120,11 @@ export function RevenueTrendChart({
               width={72}
             />
             <Tooltip content={<TrendTooltip />} />
-            <Legend wrapperStyle={{ fontSize: '12px' }} />
             <Line
               type="monotone"
               dataKey="collected"
               name="Collected"
               stroke={collectedStroke}
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="due"
-              name="Due (scheduled)"
-              stroke={dueStroke}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}

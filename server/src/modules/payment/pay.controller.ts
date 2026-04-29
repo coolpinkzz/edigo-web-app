@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
 import { env } from "../../config/env";
 import { createOrderForPayToken } from "./payment.service";
-import { recordPayLinkAccess } from "../reminder/reminder.service";
+import {
+  recordPayLinkAccess,
+  resolvePayTokenFromRequestParam,
+} from "../reminder/reminder.service";
 
 function escapeHtml(s: string): string {
   return s
@@ -85,50 +88,41 @@ function renderCheckoutHtml(input: {
 }
 
 /**
- * GET /pay/:token — public; creates/refreshes Razorpay order and opens Checkout.
+ * GET /pay/:token and GET /p/:token — public; `token` is either the long pay token
+ * or a short code (reminder SMS). Resolves to Razorpay Checkout HTML.
  */
 export async function getPayPage(req: Request, res: Response): Promise<void> {
-  const token = typeof req.params.token === "string" ? req.params.token : "";
+  const param = typeof req.params.token === "string" ? req.params.token : "";
+  const token = await resolvePayTokenFromRequestParam(param);
+  if (!token) {
+    res
+      .status(404)
+      .send(renderErrorHtml("Invalid link", "This payment link is not valid."));
+    return;
+  }
   await recordPayLinkAccess(token);
   const checkout = await createOrderForPayToken(token);
 
   if (!checkout.ok) {
     if (checkout.code === "expired") {
-      res
-        .status(410)
-        .send(
-          renderErrorHtml("Link expired", checkout.message),
-        );
+      res.status(410).send(renderErrorHtml("Link expired", checkout.message));
       return;
     }
     if (checkout.code === "already_paid") {
       if (env.clientAppUrl !== "") {
-        res.redirect(
-          302,
-          `${env.clientAppUrl}/payment-already-paid`,
-        );
+        res.redirect(302, `${env.clientAppUrl}/payment-already-paid`);
         return;
       }
-      res
-        .status(200)
-        .send(
-          renderErrorHtml("Already paid", checkout.message),
-        );
+      res.status(200).send(renderErrorHtml("Already paid", checkout.message));
       return;
     }
     if (checkout.code === "invalid") {
-      res
-        .status(404)
-        .send(
-          renderErrorHtml("Invalid link", checkout.message),
-        );
+      res.status(404).send(renderErrorHtml("Invalid link", checkout.message));
       return;
     }
     res
       .status(500)
-      .send(
-        renderErrorHtml("Payment unavailable", checkout.message),
-      );
+      .send(renderErrorHtml("Payment unavailable", checkout.message));
     return;
   }
 

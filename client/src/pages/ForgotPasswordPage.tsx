@@ -239,8 +239,7 @@ export function ForgotPasswordPage() {
                     String(v ?? "")
                       .replace(/\D/g, "")
                       .slice(0, 6),
-                  validate: (v) =>
-                    v.length === 6 || "Enter the 6-digit code",
+                  validate: (v) => v.length === 6 || "Enter the 6-digit code",
                 })}
               />
               {otpForm.formState.errors.otp && (

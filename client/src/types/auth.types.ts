@@ -1,3 +1,5 @@
+import type { TenantType } from "./tenant.types";
+
 /**
  * Login form values (what the user enters).
  * Matches POST /auth/login body shape for phone + password.
@@ -14,7 +16,23 @@ export interface LoginApiPayload extends LoginRequest {
   tenantSlug: string
 }
 
-import type { TenantType } from "./tenant.types";
+/** Optional campus row for POST /auth/signup. */
+export interface SignupBranchInput {
+  name: string;
+  code?: string;
+  address?: string;
+}
+
+/** JSON body for POST /auth/signup (tenant onboarding). */
+export interface SignupTenantBody {
+  tenantName: string;
+  tenantSlug: string;
+  tenantType: TenantType;
+  phone: string;
+  password: string;
+  name: string;
+  branches?: SignupBranchInput[];
+}
 
 /** Response from POST /auth/login (server returns `token`). */
 export interface LoginResponse {

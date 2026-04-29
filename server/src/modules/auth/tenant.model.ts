@@ -16,6 +16,8 @@ export interface ITenant extends Document {
   razorpayRouteProductId?: string;
   /** Route product `activation_status` from Razorpay (e.g. `needs_clarification`, `activated`). */
   razorpayRouteActivationStatus?: string;
+  /** Public https URL of organization logo (e.g. after S3 upload). */
+  logoUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,6 +44,7 @@ const tenantSchema = new Schema<ITenant>(
     razorpayLinkedAccountCreatedAt: { type: Date },
     razorpayRouteProductId: { type: String, trim: true },
     razorpayRouteActivationStatus: { type: String, trim: true },
+    logoUrl: { type: String, trim: true },
   },
   { timestamps: true },
 );

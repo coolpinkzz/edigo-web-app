@@ -11,10 +11,14 @@ import {
   type RazorpayLinkedAccountRemote,
   submitRouteSettlementBankForTenant,
 } from "./razorpay-linked-account.service";
+import {
+  isStudentPhotoUploadConfigured,
+  presignTenantLogoPut,
+} from "../student/student-photo-s3.service";
 import { Tenant } from "./tenant.model";
 
 const TENANT_AUTH_SELECT =
-  "name tenantType razorpayLinkedAccountId razorpayLinkedAccountStatus razorpayRouteProductId razorpayRouteActivationStatus" as const;
+  "name tenantType logoUrl razorpayLinkedAccountId razorpayLinkedAccountStatus razorpayRouteProductId razorpayRouteActivationStatus" as const;
 
 function tenantRazorpayLinkedAccountShape(
   t: {
@@ -67,6 +71,7 @@ function tenantAuthPayload(
   t: {
     name?: string;
     tenantType?: string;
+    logoUrl?: string | null;
     razorpayLinkedAccountId?: string | null;
     razorpayLinkedAccountStatus?: string | null;
     razorpayRouteProductId?: string | null;
@@ -76,12 +81,18 @@ function tenantAuthPayload(
 ): {
   name: string;
   tenantType: string;
+  logoUrl?: string;
   razorpayLinkedAccount: ReturnType<typeof tenantRazorpayLinkedAccountShape>;
   razorpayRoute: ReturnType<typeof tenantRazorpayRouteShape>;
 } {
+  const logo =
+    typeof t?.logoUrl === "string" && t.logoUrl.trim() !== ""
+      ? t.logoUrl.trim()
+      : undefined;
   return {
     name: typeof t?.name === "string" ? t.name : "",
     tenantType: t?.tenantType ?? "SCHOOL",
+    ...(logo ? { logoUrl: logo } : {}),
     razorpayLinkedAccount: tenantRazorpayLinkedAccountShape(
       t,
       linkedAccountRemote,
@@ -128,8 +139,23 @@ async function tenantAuthPayloadWithRemote(
  */
 export async function signup(req: Request, res: Response): Promise<void> {
   try {
-    const { tenantName, tenantSlug, tenantType, phone, password, name } =
-      req.body;
+    const {
+      tenantName,
+      tenantSlug,
+      tenantType,
+      phone,
+      password,
+      name,
+      branches,
+    } = req.body as {
+      tenantName?: string;
+      tenantSlug?: string;
+      tenantType?: unknown;
+      phone?: string;
+      password?: string;
+      name?: string;
+      branches?: authService.SignupBranchInput[];
+    };
 
     if (
       !tenantName ||
@@ -154,6 +180,23 @@ export async function signup(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    let branchPayload: authService.SignupBranchInput[] | undefined;
+    if (branches !== undefined) {
+      if (!Array.isArray(branches)) {
+        res.status(400).json({ error: "branches must be an array when provided" });
+        return;
+      }
+      branchPayload = branches.map((b: { name?: string; code?: string; address?: string }) => ({
+        name: typeof b?.name === "string" ? b.name : "",
+        ...(typeof b?.code === "string" && b.code.trim() !== ""
+          ? { code: b.code.trim() }
+          : {}),
+        ...(typeof b?.address === "string" && b.address.trim() !== ""
+          ? { address: b.address.trim() }
+          : {}),
+      }));
+    }
+
     const result = await authService.signup({
       tenantName,
       tenantSlug,
@@ -161,6 +204,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
       phone,
       password,
       name,
+      ...(branchPayload ? { branches: branchPayload } : {}),
     });
 
     res.status(201).json(result);
@@ -217,7 +261,7 @@ export async function me(req: Request, res: Response): Promise<void> {
 
 /**
  * PATCH /auth/tenant
- * Tenant admin: update organization display name (login slug unchanged).
+ * Tenant admin: update organization display name and/or logo URL (login slug unchanged).
  */
 export async function patchTenant(
   req: Request,
@@ -225,13 +269,37 @@ export async function patchTenant(
 ): Promise<void> {
   try {
     const tenantId = req.user!.tenantId;
-    const { name } = req.body as { name: string };
+    const body = req.body as {
+      name?: string;
+      logoUrl?: string | null;
+    };
 
-    const updated = await Tenant.findByIdAndUpdate(
-      tenantId,
-      { $set: { name: name.trim() } },
-      { new: true },
-    )
+    const $set: Record<string, string> = {};
+    const $unset: Record<string, 1> = {};
+
+    if (body.name !== undefined) {
+      $set.name = body.name.trim();
+    }
+    if (body.logoUrl !== undefined) {
+      if (body.logoUrl === null || body.logoUrl === "") {
+        $unset.logoUrl = 1;
+      } else {
+        $set.logoUrl = String(body.logoUrl).trim();
+      }
+    }
+
+    if (!Object.keys($set).length && !Object.keys($unset).length) {
+      res.status(400).json({ error: "No updates provided" });
+      return;
+    }
+
+    const updateDoc: { $set?: typeof $set; $unset?: typeof $unset } = {};
+    if (Object.keys($set).length) updateDoc.$set = $set;
+    if (Object.keys($unset).length) updateDoc.$unset = $unset;
+
+    const updated = await Tenant.findByIdAndUpdate(tenantId, updateDoc, {
+      new: true,
+    })
       .select(TENANT_AUTH_SELECT)
       .lean()
       .exec();
@@ -246,6 +314,35 @@ export async function patchTenant(
     });
   } catch {
     res.status(500).json({ error: "Failed to update tenant" });
+  }
+}
+
+/**
+ * POST /auth/tenant/logo/presign
+ * Tenant admin: presigned S3 PUT for organization logo (same storage as student photos).
+ */
+export async function presignTenantLogo(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!isStudentPhotoUploadConfigured()) {
+      res.status(503).json({
+        error:
+          "Upload is not configured. Set AWS_REGION and AWS_S3_BUCKET on the server.",
+      });
+      return;
+    }
+    const tenantId = req.user!.tenantId;
+    const { contentType } = req.body as { contentType: string };
+    const result = await presignTenantLogoPut(tenantId, contentType);
+    res.json(result);
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Failed to prepare organization logo upload";
+    res.status(400).json({ error: message });
   }
 }
 
@@ -272,7 +369,7 @@ export async function createRazorpayLinkedAccount(
         addresses: {
           registered: {
             street1: string;
-            street2?: string;
+            street2: string;
             city: string;
             state: string;
             postalCode: string;

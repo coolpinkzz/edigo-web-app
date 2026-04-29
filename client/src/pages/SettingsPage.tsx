@@ -1,12 +1,26 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Controller, useForm, useWatch } from "react-hook-form";
+import {
+  Check,
+  ChevronDown,
+  CircleAlert,
+  CircleDashed,
+  Lock,
+} from "lucide-react";
 import {
   createRazorpayLinkedAccount,
   createRazorpayRouteSettlements,
   patchTenant,
+  uploadTenantLogoAndGetUrl,
 } from "../api";
 import { Button, Card, Input, SelectField } from "../components/ui";
+import {
+  RAZORPAY_ROUTE_BUSINESS_CATEGORIES,
+  RAZORPAY_ROUTE_DEFAULT_CATEGORY,
+  RAZORPAY_ROUTE_DEFAULT_SUBCATEGORY,
+  RAZORPAY_ROUTE_SUBCATEGORIES_BY_CATEGORY,
+} from "../constants/razorpay-route-business-categories";
 import { authMeQueryKey } from "../constants/query-keys";
 import { useAuthSession } from "../hooks/useAuthSession";
 import type {
@@ -15,6 +29,7 @@ import type {
   RazorpayLinkedAccountSummary,
   RazorpayRouteSummary,
 } from "../types";
+import { cn } from "../lib/utils";
 import { getErrorMessage } from "../utils";
 
 type OrgFormValues = { name: string };
@@ -43,12 +58,11 @@ function defaultLinkedForm(): CreateRazorpayLinkedAccountBody {
     email: "",
     phone: "",
     legalBusinessName: "",
-    customerFacingBusinessName: "",
     contactName: "",
     businessType: "partnership",
     profile: {
-      category: "",
-      subcategory: "",
+      category: RAZORPAY_ROUTE_DEFAULT_CATEGORY,
+      subcategory: RAZORPAY_ROUTE_DEFAULT_SUBCATEGORY,
       addresses: {
         registered: {
           street1: "",
@@ -62,7 +76,6 @@ function defaultLinkedForm(): CreateRazorpayLinkedAccountBody {
     },
     legalInfo: {
       pan: "",
-      gst: "",
     },
   };
 }
@@ -74,6 +87,163 @@ function defaultSettlementForm(): SettlementFormValues {
     ifscCode: "",
     tncAccepted: false,
   };
+}
+
+/** Collapsible panel for onboarding subsections — button avoids nested forms. */
+function AccordionSection({
+  title,
+  description,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-card-border bg-background/90">
+      <button
+        type="button"
+        aria-expanded={open}
+        className={cn(
+          "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40",
+          open ? "border-b border-card-border" : "",
+        )}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ChevronDown
+          className={cn(
+            "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            open ? "rotate-180" : "rotate-0",
+          )}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-foreground">
+            {title}
+          </span>
+          {description ? (
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {description}
+            </span>
+          ) : null}
+        </span>
+      </button>
+      {/* Panels stay mounted (hidden when closed) so react-hook-form fields stay registered */}
+      <div
+        className={cn(
+          "space-y-4 border-t border-card-border px-4 pb-4 pt-3",
+          !open && "hidden",
+        )}
+        aria-hidden={!open}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+type Step1Badge = "active" | "done";
+type Step2Badge = "locked" | "active" | "pending" | "done";
+
+/** Horizontal two-step indicator for payouts (business → bank). */
+function PayoutSetupStepper(props: { step1: Step1Badge; step2: Step2Badge }) {
+  const step1Cls =
+    props.step1 === "done"
+      ? "border-emerald-600/70 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+      : "border-primary bg-primary/10 text-primary ring-2 ring-primary/20";
+
+  const step2Cls =
+    props.step2 === "locked"
+      ? "border border-dashed border-card-border bg-muted/30 text-muted-foreground"
+      : props.step2 === "done"
+        ? "border-emerald-600/70 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+        : props.step2 === "active"
+          ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/20"
+          : "border-amber-500/60 bg-amber-500/10 text-foreground"; // pending
+
+  const step2Sub =
+    props.step2 === "locked"
+      ? "After business details"
+      : props.step2 === "active"
+        ? "IFSC & account with Razorpay"
+        : props.step2 === "pending"
+          ? "Under review or waiting on Razorpay"
+          : "Settlements ready";
+
+  return (
+    <nav
+      aria-label="Payout setup progress"
+      className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-6"
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <div
+          className={cn(
+            "grid h-10 w-10 shrink-0 place-items-center rounded-full border text-sm font-semibold leading-none [&_svg]:block",
+            step1Cls,
+          )}
+          aria-hidden
+        >
+          {props.step1 === "done" ? (
+            <Check
+              className="size-4.5 text-primary"
+              strokeWidth={2.75}
+              aria-hidden
+            />
+          ) : (
+            <span className="tabular-nums">1</span>
+          )}
+        </div>
+        <div className="min-w-0 pt-1">
+          <p className="text-sm font-semibold text-foreground">
+            Business details
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {props.step1 === "done"
+              ? "Registered with Razorpay"
+              : "Legal identity for payouts"}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="hidden h-auto w-px shrink-0 self-stretch rounded-full bg-border sm:block sm:min-h-[52px]"
+        aria-hidden
+      />
+
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <div
+          className={cn(
+            "grid h-10 w-10 shrink-0 place-items-center rounded-full border text-sm font-semibold leading-none [&_svg]:block",
+            step2Cls,
+          )}
+          aria-hidden
+        >
+          {props.step2 === "locked" ? (
+            <Lock className="size-[18px] opacity-80" aria-hidden />
+          ) : props.step2 === "done" ? (
+            <Check
+              className="size-4.5 text-primary"
+              strokeWidth={2.75}
+              aria-hidden
+            />
+          ) : props.step2 === "pending" ? (
+            <span aria-hidden className="text-xs font-bold leading-none">
+              <CircleAlert className="size-4.5 text-amber-500" />
+            </span>
+          ) : (
+            <span className="tabular-nums">2</span>
+          )}
+        </div>
+        <div className="min-w-0 pt-1">
+          <p className="text-sm font-semibold text-foreground">Bank payouts</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{step2Sub}</p>
+        </div>
+      </div>
+    </nav>
+  );
 }
 
 /**
@@ -90,6 +260,29 @@ export function SettingsPage() {
     defaultValues: defaultSettlementForm(),
   });
 
+  const watchedProfileCategory = useWatch({
+    control: linkedForm.control,
+    name: "profile.category",
+  });
+  const razorpaySubcategoryOptions = useMemo(() => {
+    if (!watchedProfileCategory?.trim()) return [];
+    const list =
+      RAZORPAY_ROUTE_SUBCATEGORIES_BY_CATEGORY[watchedProfileCategory];
+    return list ? [...list] : [];
+  }, [watchedProfileCategory]);
+
+  useEffect(() => {
+    if (razorpaySubcategoryOptions.length === 0) return;
+    const cur = linkedForm.getValues("profile.subcategory");
+    if (!razorpaySubcategoryOptions.some((o) => o.value === cur)) {
+      linkedForm.setValue(
+        "profile.subcategory",
+        razorpaySubcategoryOptions[0].value,
+        { shouldValidate: true },
+      );
+    }
+  }, [linkedForm, razorpaySubcategoryOptions, watchedProfileCategory]);
+
   useEffect(() => {
     const name = sessionQuery.data?.tenant?.name;
     if (name !== undefined) {
@@ -98,7 +291,26 @@ export function SettingsPage() {
   }, [sessionQuery.data?.tenant?.name, orgForm]);
 
   const orgMutation = useMutation({
-    mutationFn: patchTenant,
+    mutationFn: (body: { name?: string; logoUrl?: string | null }) =>
+      patchTenant(body),
+    onSuccess: (data) => {
+      void queryClient.setQueryData(authMeQueryKey, (prev: unknown) => {
+        if (!prev || typeof prev !== "object") return prev;
+        const p = prev as AuthMeResponse;
+        return {
+          ...p,
+          tenant: data.tenant,
+        };
+      });
+    },
+  });
+
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const logoUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const publicUrl = await uploadTenantLogoAndGetUrl(file);
+      return patchTenant({ logoUrl: publicUrl });
+    },
     onSuccess: (data) => {
       void queryClient.setQueryData(authMeQueryKey, (prev: unknown) => {
         if (!prev || typeof prev !== "object") return prev;
@@ -143,8 +355,10 @@ export function SettingsPage() {
     orgMutation.mutate({ name: values.name.trim() });
   });
 
+  const tenantLogoUrl = sessionQuery.data?.tenant?.logoUrl;
+  const storagePending = orgMutation.isPending || logoUploadMutation.isPending;
+
   const onSubmitLinked = linkedForm.handleSubmit((values) => {
-    const gst = values.legalInfo.gst?.trim();
     const payload: CreateRazorpayLinkedAccountBody = {
       email: values.email.trim(),
       phone: values.phone.trim(),
@@ -157,29 +371,20 @@ export function SettingsPage() {
         addresses: {
           registered: {
             street1: values.profile.addresses.registered.street1.trim(),
+            street2: values.profile.addresses.registered.street2.trim(),
             city: values.profile.addresses.registered.city.trim(),
             state: values.profile.addresses.registered.state.trim(),
             postalCode: values.profile.addresses.registered.postalCode.trim(),
             country: values.profile.addresses.registered.country
               .trim()
               .toUpperCase(),
-            ...(values.profile.addresses.registered.street2?.trim()
-              ? {
-                  street2: values.profile.addresses.registered.street2.trim(),
-                }
-              : {}),
           },
         },
       },
       legalInfo: {
         pan: values.legalInfo.pan.trim().toUpperCase(),
-        ...(gst ? { gst: gst.toUpperCase() } : {}),
       },
     };
-    const cf = values.customerFacingBusinessName?.trim();
-    if (cf) {
-      payload.customerFacingBusinessName = cf;
-    }
     linkedMutation.mutate(payload);
   });
 
@@ -210,15 +415,15 @@ export function SettingsPage() {
     );
   }
 
-  const rp: RazorpayLinkedAccountSummary =
-    sessionQuery.data?.tenant?.razorpayLinkedAccount ?? { linked: false };
+  const rp: RazorpayLinkedAccountSummary = sessionQuery.data?.tenant
+    ?.razorpayLinkedAccount ?? { linked: false };
   const razorpayLinked = Boolean(rp.linked);
 
-  const route: RazorpayRouteSummary =
-    sessionQuery.data?.tenant?.razorpayRoute ?? {
-      productConfigured: false,
-      payoutsReady: false,
-    };
+  const route: RazorpayRouteSummary = sessionQuery.data?.tenant
+    ?.razorpayRoute ?? {
+    productConfigured: false,
+    payoutsReady: false,
+  };
 
   const activationStatus = route.activationStatus;
   const settlementBlocked =
@@ -230,21 +435,83 @@ export function SettingsPage() {
     !route.payoutsReady &&
     !settlementBlocked;
 
+  const payoutStep1: Step1Badge = razorpayLinked ? "done" : "active";
+  const payoutStep2: Step2Badge = !razorpayLinked
+    ? "locked"
+    : route.payoutsReady
+      ? "done"
+      : showSettlementForm
+        ? "active"
+        : "pending";
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <p className="text-sm text-muted-foreground">
-        The organization name appears in the app header for everyone in your
-        workspace. Your sign-in URL (tenant slug) is not changed here.
-      </p>
-
       <Card className="p-6">
         <h2 className="text-lg font-semibold text-foreground">Organization</h2>
         <form onSubmit={onSubmitOrg} className="mt-4 space-y-4">
           <Input
             label="Organization name"
             {...orgForm.register("name", { required: true })}
-            disabled={orgMutation.isPending}
+            disabled={storagePending}
           />
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-foreground/90">
+              Organization logo
+            </p>
+            <div className="flex flex-wrap items-end gap-4">
+              {tenantLogoUrl ? (
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2">
+                  <img
+                    src={tenantLogoUrl}
+                    alt=""
+                    className="h-16 w-16 shrink-0 rounded-md border border-border bg-background object-contain"
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No logo — a default mark is used in the sidebar.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <input
+                  ref={logoFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) logoUploadMutation.mutate(f);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={storagePending}
+                  onClick={() => logoFileRef.current?.click()}
+                >
+                  {logoUploadMutation.isPending ? "Uploading…" : "Upload image"}
+                </Button>
+                {tenantLogoUrl && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={storagePending}
+                    onClick={() => orgMutation.mutate({ logoUrl: null })}
+                  >
+                    {orgMutation.isPending ? "…" : "Remove logo"}
+                  </Button>
+                )}
+              </div>
+            </div>
+            {logoUploadMutation.isError && (
+              <p className="mt-2 text-sm text-red-600" role="alert">
+                {getErrorMessage(logoUploadMutation.error)}
+              </p>
+            )}
+          </div>
+
           {orgMutation.isError && (
             <p className="text-sm text-red-600" role="alert">
               {getErrorMessage(orgMutation.error)}
@@ -255,43 +522,41 @@ export function SettingsPage() {
             variant="primary"
             disabled={orgMutation.isPending}
           >
-            {orgMutation.isPending ? "Saving…" : "Save"}
+            {orgMutation.isPending ? "Saving…" : "Save name"}
           </Button>
         </form>
       </Card>
 
       <Card className="p-6">
-        <h2 className="text-lg font-semibold text-foreground">
-          Razorpay Route onboarding
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Two steps: (1) business linked account, (2) settlement bank account
-          sent to Razorpay only—nothing is stored in our database. Requires Route
-          on your merchant account.{" "}
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h2 className="text-lg font-semibold text-foreground">
+            Payouts & settlements
+          </h2>
+          <span className="rounded-md border border-card-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            Razorpay
+          </span>
+        </div>
+        <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+          Fee payments settle to your organization through Razorpay. Complete
+          the business profile, then add your payout bank—Razorpay holds KYC &
+          payout details securely. Route must be enabled on your merchant{" "}
           <a
             href="https://razorpay.com/docs/payments/route/linked-account/"
             target="_blank"
             rel="noreferrer noopener"
-            className="text-primary underline underline-offset-2"
+            className="font-medium text-primary underline underline-offset-2"
           >
-            Linked accounts
+            account
           </a>
+          .
         </p>
 
-        <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>
-            <span className="text-foreground">Business profile</span> — create
-            the linked account
-          </li>
-          <li>
-            <span className="text-foreground">Settlement account</span> — IFSC &
-            account for Route payouts
-          </li>
-        </ol>
+        <div className="mt-6 rounded-xl border border-card-border bg-muted/30 p-4">
+          <PayoutSetupStepper step1={payoutStep1} step2={payoutStep2} />
+        </div>
 
         {!razorpayLinked ? (
-          <form onSubmit={onSubmitLinked} className="mt-6 space-y-6">
-            <p className="text-sm font-medium text-foreground">Step 1 of 2</p>
+          <form onSubmit={onSubmitLinked} className="mt-8 space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Business email"
@@ -311,11 +576,6 @@ export function SettingsPage() {
             <Input
               label="Legal business name"
               {...linkedForm.register("legalBusinessName", { required: true })}
-              disabled={linkedMutation.isPending}
-            />
-            <Input
-              label="Customer-facing business name (optional)"
-              {...linkedForm.register("customerFacingBusinessName")}
               disabled={linkedMutation.isPending}
             />
             <div className="grid gap-4 sm:grid-cols-2">
@@ -342,121 +602,169 @@ export function SettingsPage() {
               />
             </div>
 
-            <div>
-              <p className="mb-3 text-sm font-medium text-foreground/90">
-                Business profile
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  label="Category"
-                  placeholder="e.g. education"
-                  {...linkedForm.register("profile.category", {
-                    required: true,
-                  })}
-                  disabled={linkedMutation.isPending}
-                />
-                <Input
-                  label="Subcategory"
-                  placeholder="e.g. school"
-                  {...linkedForm.register("profile.subcategory", {
-                    required: true,
-                  })}
-                  disabled={linkedMutation.isPending}
-                />
-              </div>
-            </div>
+            <div className="space-y-3">
+              <AccordionSection
+                title="Category & industry"
+                description={
+                  <span className="text-muted-foreground">
+                    Matches Razorpay’s lists — see{" "}
+                    <a
+                      href="https://razorpay.com/docs/payments/route/integration-guide/#business-category"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="font-medium text-primary underline underline-offset-2"
+                    >
+                      business category
+                    </a>{" "}
+                    &{" "}
+                    <a
+                      href="https://razorpay.com/docs/payments/route/integration-guide/#business-sub-category"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="font-medium text-primary underline underline-offset-2"
+                    >
+                      business sub-category
+                    </a>
+                  </span>
+                }
+                defaultOpen
+              >
+                <div className="grid gap-4 sm:grid-cols-1 sm:gap-6 lg:grid-cols-2">
+                  <Controller
+                    name="profile.category"
+                    control={linkedForm.control}
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <SelectField
+                        label="Business category"
+                        placeholder="Select category"
+                        options={[...RAZORPAY_ROUTE_BUSINESS_CATEGORIES]}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        onBlur={field.onBlur}
+                        disabled={linkedMutation.isPending}
+                        itemClassName="whitespace-normal leading-snug"
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="profile.subcategory"
+                    control={linkedForm.control}
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <SelectField
+                        label="Business sub-category"
+                        placeholder={
+                          watchedProfileCategory
+                            ? "Select sub-category"
+                            : "Select a category first"
+                        }
+                        options={razorpaySubcategoryOptions}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        onBlur={field.onBlur}
+                        disabled={
+                          linkedMutation.isPending ||
+                          razorpaySubcategoryOptions.length === 0
+                        }
+                        itemClassName="whitespace-normal leading-snug"
+                      />
+                    )}
+                  />
+                </div>
+              </AccordionSection>
 
-            <div>
-              <p className="mb-3 text-sm font-medium text-foreground/90">
-                Registered address
-              </p>
-              <div className="space-y-4">
-                <Input
-                  label="Street line 1"
-                  {...linkedForm.register(
-                    "profile.addresses.registered.street1",
-                    { required: true },
-                  )}
-                  disabled={linkedMutation.isPending}
-                />
-                <Input
-                  label="Street line 2 (optional)"
-                  {...linkedForm.register(
-                    "profile.addresses.registered.street2",
-                  )}
-                  disabled={linkedMutation.isPending}
-                />
-                <div className="grid gap-4 sm:grid-cols-2">
+              <AccordionSection
+                title="Registered address"
+                description="Must match documents you may submit to Razorpay"
+              >
+                <div className="space-y-4">
                   <Input
-                    label="City"
+                    label="Street line 1"
                     {...linkedForm.register(
-                      "profile.addresses.registered.city",
+                      "profile.addresses.registered.street1",
                       { required: true },
                     )}
                     disabled={linkedMutation.isPending}
                   />
                   <Input
-                    label="State"
+                    label="Street line 2"
                     {...linkedForm.register(
-                      "profile.addresses.registered.state",
+                      "profile.addresses.registered.street2",
                       { required: true },
                     )}
+                    disabled={linkedMutation.isPending}
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Input
+                      label="City"
+                      {...linkedForm.register(
+                        "profile.addresses.registered.city",
+                        { required: true },
+                      )}
+                      disabled={linkedMutation.isPending}
+                    />
+                    <Input
+                      label="State"
+                      {...linkedForm.register(
+                        "profile.addresses.registered.state",
+                        { required: true },
+                      )}
+                      disabled={linkedMutation.isPending}
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Postal code"
+                      {...linkedForm.register(
+                        "profile.addresses.registered.postalCode",
+                        { required: true },
+                      )}
+                      disabled={linkedMutation.isPending}
+                    />
+                    <Input
+                      label="Country (ISO code)"
+                      maxLength={2}
+                      {...linkedForm.register(
+                        "profile.addresses.registered.country",
+                        {
+                          required: true,
+                          maxLength: 2,
+                          minLength: 2,
+                        },
+                      )}
+                      disabled={linkedMutation.isPending}
+                    />
+                  </div>
+                </div>
+              </AccordionSection>
+
+              <AccordionSection
+                title="Tax IDs (India)"
+                description="PAN for the legal entity"
+              >
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Use the PAN issued to this legal entity. If verification
+                  fails, try adjusting business type or the PAN used.{" "}
+                  <a
+                    href="https://razorpay.com/docs/api/payments/route/create-linked-account/"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="font-medium text-primary underline underline-offset-2"
+                  >
+                    Razorpay docs
+                  </a>
+                </p>
+                <div className="pt-2">
+                  <Input
+                    label="PAN"
+                    {...linkedForm.register("legalInfo.pan", {
+                      required: true,
+                    })}
                     disabled={linkedMutation.isPending}
                   />
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="Postal code"
-                    {...linkedForm.register(
-                      "profile.addresses.registered.postalCode",
-                      { required: true },
-                    )}
-                    disabled={linkedMutation.isPending}
-                  />
-                  <Input
-                    label="Country (ISO code)"
-                    maxLength={2}
-                    {...linkedForm.register(
-                      "profile.addresses.registered.country",
-                      { required: true, maxLength: 2, minLength: 2 },
-                    )}
-                    disabled={linkedMutation.isPending}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-3 text-sm font-medium text-foreground/90">
-                Tax IDs (India)
-              </p>
-              <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-                Use the PAN issued to this legal entity. If Razorpay rejects the
-                combination of PAN and business type, adjust the business type (e.g.
-                company → Private/Public limited) or use the PAN that matches the
-                entity. See{" "}
-                <a
-                  href="https://razorpay.com/docs/api/payments/route/create-linked-account/"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="text-primary underline underline-offset-2"
-                >
-                  Create a Linked Account
-                </a>
-                .
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  label="PAN"
-                  {...linkedForm.register("legalInfo.pan", { required: true })}
-                  disabled={linkedMutation.isPending}
-                />
-                <Input
-                  label="GST (optional)"
-                  {...linkedForm.register("legalInfo.gst")}
-                  disabled={linkedMutation.isPending}
-                />
-              </div>
+              </AccordionSection>
             </div>
 
             {linkedMutation.isError && (
@@ -472,93 +780,72 @@ export function SettingsPage() {
             >
               {linkedMutation.isPending
                 ? "Submitting…"
-                : "Continue — create linked account"}
+                : "Continue to bank payouts"}
             </Button>
           </form>
         ) : (
-          <div className="mt-6 space-y-6">
-            <div className="rounded-lg border border-card-border bg-muted/40 px-4 py-3 text-sm">
-              <p className="font-medium text-foreground">
-                Step 1 complete — Linked account
+          <div className="mt-8 space-y-6">
+            <div className="rounded-lg border border-emerald-600/20 bg-emerald-500/8 px-4 py-4 text-sm dark:bg-emerald-500/10">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="inline-flex items-center rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm dark:bg-emerald-500">
+                  Business verified
+                </span>
+                {rp.status ? (
+                  <span className="text-xs font-medium capitalize text-foreground/90">
+                    <span className="text-muted-foreground" aria-hidden>
+                      ·
+                    </span>{" "}
+                    {rp.status.replace(/_/g, " ")}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 font-medium leading-snug text-foreground">
+                {rp.remote?.legalBusinessName ??
+                  "Your linked business account is on file with Razorpay."}
               </p>
-              {rp.accountId ? (
-                <p className="mt-1 text-muted-foreground">
-                  Account ID:{" "}
-                  <span className="font-mono text-foreground">{rp.accountId}</span>
-                </p>
-              ) : null}
-              {rp.status ? (
-                <p className="mt-1 text-muted-foreground">
-                  Account status:{" "}
-                  <span className="text-foreground">{rp.status}</span>
-                </p>
-              ) : null}
               {rp.remote ? (
-                <div className="mt-3 space-y-1.5 border-t border-card-border pt-3 text-xs">
-                  <p className="font-medium text-foreground/80">
-                    From Razorpay{" "}
-                    <a
-                      href="https://razorpay.com/docs/api/payments/route/fetch-with-id"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="font-normal text-primary underline underline-offset-2"
-                    >
-                      (live)
-                    </a>
-                  </p>
-                  {rp.remote.legalBusinessName ? (
-                    <p className="text-muted-foreground">
-                      Legal name:{" "}
-                      <span className="text-foreground">
-                        {rp.remote.legalBusinessName}
-                      </span>
-                    </p>
-                  ) : null}
-                  {rp.remote.businessType ? (
-                    <p className="text-muted-foreground">
-                      Business type:{" "}
-                      <span className="font-mono text-foreground">
-                        {rp.remote.businessType}
-                      </span>
-                    </p>
-                  ) : null}
+                <dl className="mt-4 space-y-1.5 text-xs text-muted-foreground">
                   {rp.remote.email ? (
-                    <p className="text-muted-foreground">
-                      Email:{" "}
-                      <span className="text-foreground">{rp.remote.email}</span>
-                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      <dt className="font-medium text-foreground/80">Email</dt>
+                      <dd className="text-foreground">{rp.remote.email}</dd>
+                    </div>
                   ) : null}
                   {rp.remote.contactName ? (
-                    <p className="text-muted-foreground">
-                      Contact:{" "}
-                      <span className="text-foreground">
+                    <div className="flex flex-wrap gap-1">
+                      <dt className="font-medium text-foreground/80">
+                        Contact
+                      </dt>
+                      <dd className="text-foreground">
                         {rp.remote.contactName}
-                      </span>
-                    </p>
+                      </dd>
+                    </div>
                   ) : null}
-                  {rp.remote.category || rp.remote.subcategory ? (
-                    <p className="text-muted-foreground">
-                      Category:{" "}
-                      <span className="text-foreground">
-                        {[rp.remote.category, rp.remote.subcategory]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    </p>
-                  ) : null}
-                </div>
+                </dl>
+              ) : null}
+              {rp.accountId || rp.remote?.businessType ? (
+                <details className="group mt-4 border-t border-emerald-600/15 pt-4 dark:border-emerald-500/20">
+                  <summary className="cursor-pointer list-none text-xs font-medium text-primary [&::-webkit-details-marker]:hidden">
+                    <span className="underline underline-offset-2">
+                      Technical identifiers
+                    </span>
+                  </summary>
+                  <div className="mt-3 space-y-1.5 rounded-md bg-background/70 px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                    {rp.accountId ? <p>{rp.accountId}</p> : null}
+                  </div>
+                </details>
               ) : null}
             </div>
 
             {route.payoutsReady ? (
               <div className="rounded-lg border border-emerald-600/30 bg-emerald-500/10 px-4 py-3 text-sm text-foreground">
-                <p className="font-medium">Step 2 complete — Route settlements</p>
+                <p className="font-medium">Payouts are active</p>
                 <p className="mt-1 text-muted-foreground">
-                  Activation:{" "}
-                  <span className="text-foreground">
+                  Status:{" "}
+                  <span className="capitalize text-foreground">
                     {activationStatus ?? "activated"}
                   </span>
-                  . Payout configuration is ready on Razorpay’s side.
+                  . Route settlements are configured with Razorpay.
                 </p>
               </div>
             ) : null}
@@ -569,33 +856,35 @@ export function SettingsPage() {
                 role="status"
               >
                 <p className="font-medium text-foreground">
-                  Settlement details with Razorpay
+                  Bank details under review
                 </p>
                 <p className="mt-1 text-muted-foreground">
                   Status:{" "}
-                  <span className="font-medium text-foreground">
-                    {activationStatus}
+                  <span className="font-medium capitalize text-foreground">
+                    {activationStatus?.replace(/_/g, " ")}
                   </span>
-                  . Razorpay is reviewing or has locked edits. Check the Razorpay
-                  Dashboard or wait for their update; you cannot change bank
-                  details here until that clears.
+                  . Razorpay may be reviewing information or temporarily locked
+                  edits. Manage or follow up in the Razorpay Dashboard; you
+                  cannot change bank details here until that clears.
                 </p>
               </div>
             ) : null}
 
-            {route.productConfigured && !route.payoutsReady && !settlementBlocked ? (
+            {route.productConfigured &&
+            !route.payoutsReady &&
+            !settlementBlocked ? (
               <div
                 className="rounded-lg border border-card-border bg-muted/40 px-4 py-3 text-sm"
                 role="status"
               >
                 <p className="font-medium text-foreground">
-                  Route product configured
+                  Payout banking on Razorpay
                 </p>
                 <p className="mt-1 text-muted-foreground">
-                  A Route product is already linked to this workspace. Settlement
-                  bank details are managed in the Razorpay Dashboard; this app does
-                  not collect step 2 here. Activation:{" "}
-                  <span className="text-foreground">
+                  Route is already configured for this workspace; settlement
+                  bank details are managed in the Razorpay Dashboard (not
+                  collected again here). Current status:{" "}
+                  <span className="capitalize text-foreground">
                     {activationStatus ?? "pending"}
                   </span>
                   .
@@ -605,11 +894,15 @@ export function SettingsPage() {
 
             {showSettlementForm ? (
               <form onSubmit={onSubmitSettlement} className="space-y-4">
-                <p className="text-sm font-medium text-foreground">Step 2 of 2</p>
-                <p className="text-sm text-muted-foreground">
-                  Bank details are transmitted to Razorpay only and are not stored
-                  in this app.
-                </p>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Settlement bank account
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Enter the account Razorpay should pay out to (sent securely
+                    to Razorpay; not stored here).
+                  </p>
+                </div>
                 <Input
                   label="Beneficiary name (as per bank)"
                   autoComplete="name"
@@ -648,9 +941,9 @@ export function SettingsPage() {
                     disabled={settlementMutation.isPending}
                   />
                   <span>
-                    I confirm our organization accepts Razorpay’s terms for Route
-                    product configuration (including settlements). Submitting sends
-                    these details to Razorpay only.
+                    I confirm our organization accepts Razorpay’s terms for
+                    Route product configuration (including settlements).
+                    Submitting sends these details to Razorpay only.
                   </span>
                 </label>
                 {settlementForm.formState.errors.tncAccepted ? (
@@ -672,7 +965,7 @@ export function SettingsPage() {
                 >
                   {settlementMutation.isPending
                     ? "Submitting…"
-                    : "Submit settlement details"}
+                    : "Save payout bank"}
                 </Button>
               </form>
             ) : null}

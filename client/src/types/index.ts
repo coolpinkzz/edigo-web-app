@@ -3,6 +3,8 @@ export type {
   LoginRequest,
   LoginResponse,
   PasswordResetMessageResponse,
+  SignupBranchInput,
+  SignupTenantBody,
 } from "./auth.types";
 export type {
   AuthMeResponse,
@@ -37,6 +39,13 @@ export type {
   UpdateInstallmentResult,
 } from "./fee.types";
 export { FEE_STATUS_OPTIONS } from "./fee.types";
+export type {
+  QuotationDto,
+  QuotationStatus,
+  CreateQuotationPayload,
+  UpdateQuotationPayload,
+  PaginatedQuotations,
+} from "./quotation.types";
 export type {
   AssignFeeTemplateBody,
   AssignFeeTemplateByClassBody,
@@ -90,6 +99,11 @@ export type {
   CreateCourseBody,
   PaginatedCourses,
 } from "./course.types";
+export type {
+  BranchDto,
+  CreateBranchBody,
+  UpdateBranchBody,
+} from "./branch.types";
 export {
   COURSE_DURATION_MONTH_OPTIONS,
   COURSE_DURATION_MONTHS_MAX,

@@ -1,19 +1,19 @@
-import { Menu } from 'lucide-react'
-import { BrandMark } from './BrandMark'
-import { ThemeToggle } from '../theme/ThemeToggle'
-import { useTheme } from '../../theme'
-import { Button } from '../ui/Button'
+import { Menu } from "lucide-react";
+import { BrandMark } from "./BrandMark";
+import { ThemeToggle } from "../theme/ThemeToggle";
+import { useTheme } from "../../theme";
+import { Button } from "../ui/Button";
 
 const navLinks = [
-  { label: 'Features', href: '#features' },
-  { label: 'How it works', href: '#how-it-works' },
-  { label: 'Benefits', href: '#benefits' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'Testimonials', href: '#testimonials' },
-]
+  { label: "Features", href: "#features" },
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Benefits", href: "#benefits" },
+  { label: "Pricing", href: "#pricing" },
+  { label: "Testimonials", href: "#testimonials" },
+];
 
 export function Navbar() {
-  const { mode, setMode } = useTheme()
+  const { mode, setMode } = useTheme();
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl transition-colors duration-300 dark:border-white/10 dark:bg-slate-950/70">
@@ -47,5 +47,5 @@ export function Navbar() {
         </div>
       </div>
     </header>
-  )
+  );
 }

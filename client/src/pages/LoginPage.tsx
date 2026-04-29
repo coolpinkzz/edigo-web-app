@@ -170,6 +170,15 @@ export function LoginPage() {
               Forgot password?
             </Link>
           </p>
+          <p className="text-center text-sm text-muted-foreground">
+            New organization?{" "}
+            <Link
+              to="/onboarding"
+              className="font-medium text-primary hover:underline"
+            >
+              Create an account
+            </Link>
+          </p>
         </form>
       </div>
     </div>

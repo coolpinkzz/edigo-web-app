@@ -44,14 +44,31 @@ export const resetPasswordAfterOtpBody = Joi.object({
 });
 
 export const patchTenantBody = Joi.object({
-  name: Joi.string().trim().min(1).max(200).required().messages({
-    "string.empty": "name is required",
-  }),
-});
+  name: Joi.string().trim().min(1).max(200),
+  logoUrl: Joi.alternatives()
+    .try(
+      Joi.string().uri({ scheme: ["https", "http"] }).max(2048),
+      Joi.string().valid(""),
+      Joi.valid(null),
+    )
+    .messages({
+      "alternatives.match": "logoUrl must be a valid http(s) URL, empty string, or null",
+    }),
+})
+  .or("name", "logoUrl")
+  .messages({
+    "object.missing": "At least one of name or logoUrl is required",
+  });
+
+export const presignTenantLogoBody = Joi.object({
+  contentType: Joi.string()
+    .valid("image/jpeg", "image/png", "image/webp", "image/gif")
+    .required(),
+}).unknown(false);
 
 const registeredAddressSchema = Joi.object({
   street1: Joi.string().trim().min(1).max(200).required(),
-  street2: Joi.string().trim().max(200).allow("").optional(),
+  street2: Joi.string().trim().min(1).max(200).required(),
   city: Joi.string().trim().min(1).max(100).required(),
   state: Joi.string().trim().min(1).max(100).required(),
   postalCode: Joi.string().trim().min(1).max(20).required(),

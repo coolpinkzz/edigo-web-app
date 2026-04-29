@@ -1,11 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   BookOpen,
   ClipboardCheck,
+  GitBranch,
   LayoutDashboard,
+  FileText,
   Layers,
   LogOut,
   Settings,
@@ -27,6 +30,36 @@ import {
 } from "../utils/auth";
 import { cn } from "../utils/cn";
 
+function mainLayoutPageTitle(pathname: string): string {
+  if (pathname === "/students/new") return "Add student";
+  if (pathname === "/students/import") return "Import students";
+  if (/\/students\/[^/]+\/edit$/.test(pathname)) return "Edit student";
+  if (/^\/students\/[^/]+$/.test(pathname) && pathname !== "/students/new") {
+    return "Student profile";
+  }
+  if (pathname.startsWith("/students")) return "Students";
+  if (pathname === "/fee-overview") return "Fee overview";
+  if (pathname === "/overdue") return "Overdue fees";
+  if (pathname.startsWith("/attendance")) return "Attendance";
+  if (pathname === "/team-management") return "Team management";
+  if (pathname === "/branches") return "Branches";
+  if (/\/fee-templates\/[^/]+\/assign$/.test(pathname)) {
+    return "Assign fee structure";
+  }
+  if (/\/fee-templates\/[^/]+\/edit$/.test(pathname)) {
+    return "Edit fee structure";
+  }
+  if (pathname === "/fee-templates/new") return "Create fee structure";
+  if (pathname.startsWith("/fee-templates")) return "Fee structures";
+  if (pathname === "/quotations/new") return "New quotation";
+  if (/\/quotations\/[^/]+\/edit$/.test(pathname)) return "Edit quotation";
+  if (/^\/quotations\/[^/]+$/.test(pathname)) return "Quotation";
+  if (pathname.startsWith("/quotations")) return "Quotations";
+  if (pathname.startsWith("/courses")) return "Courses";
+  if (pathname === "/settings") return "Settings";
+  return "Dashboard";
+}
+
 /**
  * App shell: persistent header + sidebar; page content renders in `<Outlet />`.
  */
@@ -46,6 +79,15 @@ export function MainLayout() {
   const isSchoolTenant = sessionQuery.data?.tenant?.tenantType === "SCHOOL";
   const showCoursesNav =
     showTeamManagement && showDashboardStudents && isAcademyTenant;
+
+  const tenantHeaderLogoUrl = sessionQuery.data?.tenant?.logoUrl;
+  const [headerLogoFailed, setHeaderLogoFailed] = useState(false);
+  useEffect(() => {
+    setHeaderLogoFailed(false);
+  }, [tenantHeaderLogoUrl]);
+  const showHeaderTenantLogo = Boolean(
+    tenantHeaderLogoUrl && !headerLogoFailed,
+  );
 
   function handleLogout(): void {
     clearAccessToken();
@@ -81,41 +123,14 @@ export function MainLayout() {
     );
   }
 
-  const title =
-    pathname === "/students/new"
-      ? "Add student"
-      : pathname === "/students/import"
-        ? "Import students"
-        : /\/students\/[^/]+\/edit$/.test(pathname)
-          ? "Edit student"
-          : /^\/students\/[^/]+$/.test(pathname) && pathname !== "/students/new"
-            ? "Student profile"
-            : pathname.startsWith("/students")
-              ? "Students"
-              : pathname === "/fee-overview"
-                ? "Fee overview"
-                : pathname === "/overdue"
-                  ? "Overdue fees"
-                  : pathname.startsWith("/attendance")
-                    ? "Attendance"
-                    : pathname === "/team-management"
-                      ? "Team management"
-                      : /\/fee-templates\/[^/]+\/assign$/.test(pathname)
-                        ? "Assign fee structure"
-                        : pathname === "/fee-templates/new"
-                          ? "Create fee structure"
-                          : pathname.startsWith("/fee-templates")
-                            ? "Fee structures"
-                    : pathname.startsWith("/courses")
-                      ? "Courses"
-                      : pathname === "/settings"
-                        ? "Settings"
-                        : "Dashboard";
+  const title = mainLayoutPageTitle(pathname);
 
   const headerTitle =
     pathname === "/settings"
       ? "Settings"
-      : sessionQuery.data?.tenant?.name ?? title;
+      : pathname === "/branches"
+        ? "Branches"
+        : (sessionQuery.data?.tenant?.name ?? title);
 
   const navLink = (to: string, label: string, Icon: LucideIcon) => {
     const active =
@@ -156,6 +171,7 @@ export function MainLayout() {
         <nav className="flex min-h-0 flex-1 flex-col justify-start gap-1 overflow-hidden p-3">
           {showDashboardStudents &&
             navLink("/dashboard", "Dashboard", LayoutDashboard)}
+          {showFeeNav && navLink("/quotations", "Quotations", FileText)}
           {showFeeNav && navLink("/fee-overview", "Fee overview", Wallet)}
           {showFeeNav && navLink("/overdue", "Overdue fees", AlertTriangle)}
           {isSchoolTenant &&
@@ -164,6 +180,7 @@ export function MainLayout() {
           {showCoursesNav && navLink("/courses", "Courses", BookOpen)}
           {showTeamManagement &&
             navLink("/team-management", "Team management", UserCog)}
+          {showTeamManagement && navLink("/branches", "Branches", GitBranch)}
           {showTeamManagement && navLink("/settings", "Settings", Settings)}
           {showFeeNav && navLink("/fee-templates", "Fee structures", Layers)}
         </nav>
@@ -202,9 +219,21 @@ export function MainLayout() {
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <header className="shrink-0 border-b border-border bg-card px-6 py-4">
-          <h1 className="text-lg font-semibold text-foreground">
-            {headerTitle}
-          </h1>
+          <div className="flex min-w-0 items-center gap-3">
+            {showHeaderTenantLogo && (
+              <img
+                src={tenantHeaderLogoUrl}
+                alt=""
+                width={36}
+                height={36}
+                className="h-9 w-9 shrink-0 rounded-md border border-border bg-background object-contain"
+                onError={() => setHeaderLogoFailed(true)}
+              />
+            )}
+            <h1 className="min-w-0 text-lg font-semibold text-foreground">
+              {headerTitle}
+            </h1>
+          </div>
         </header>
         <main className="min-h-0 flex-1 p-6">
           <Outlet />

@@ -19,6 +19,8 @@ export type CreateStudentMutationInput = {
   feeTemplateIsInstallment?: boolean;
   /** When set, uploaded to S3 after the student row exists, then PATCH saves `photoUrl`. */
   photoFile?: File | null;
+  /** When true, `branchId` is included in create/PATCH; omit when the tenant has no branches. */
+  includeBranchInApiPayload?: boolean;
 };
 
 export function useCreateStudent() {
@@ -30,11 +32,13 @@ export function useCreateStudent() {
       values,
       feeTemplateIsInstallment,
       photoFile,
+      includeBranchInApiPayload,
     }: CreateStudentMutationInput) => {
       const me = queryClient.getQueryData<AuthMeResponse>(authMeQueryKey);
       const tenantType = me?.tenant?.tenantType ?? "SCHOOL";
       const created = await createStudent(values, tenantType, {
         feeTemplateIsInstallment,
+        includeBranchInApiPayload,
       });
       if (photoFile) {
         const url = await uploadStudentPhotoAndGetUrl(created.id, photoFile);
@@ -42,6 +46,7 @@ export function useCreateStudent() {
           created.id,
           { ...values, photoUrl: url },
           tenantType,
+          { includeBranchInApiPayload },
         );
       }
       return created;

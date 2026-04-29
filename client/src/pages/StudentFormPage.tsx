@@ -4,7 +4,6 @@ import { Link, useParams } from "react-router-dom";
 import {
   Button,
   Card,
-  CardDescription,
   CardTitle,
   Input,
   SELECT_EMPTY_VALUE,
@@ -15,6 +14,7 @@ import {
   studentToFormValues,
 } from "../api/student.api";
 import { useAuthSession } from "../hooks/useAuthSession";
+import { useBranches } from "../hooks/useBranches";
 import { useCourses } from "../hooks/useCourses";
 import { useCreateStudent } from "../hooks/useCreateStudent";
 import { useFeeTemplates } from "../hooks/useFeeTemplates";
@@ -31,8 +31,6 @@ import type { CreateStudentFormValues } from "../types";
 import { addDaysToISODate, todayISODate } from "../utils/installments";
 import { ymdToBusinessMidnightMs } from "../utils/timezone";
 import { cn, getErrorMessage } from "../utils";
-
-const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
 const GENDER_SELECT_OPTIONS = [
   { value: SELECT_EMPTY_VALUE, label: "Prefer not to say" },
@@ -52,6 +50,7 @@ const DEFAULT_VALUES: CreateStudentFormValues = {
   scholarId: "",
   panNumber: "",
   dateOfBirth: "",
+  age: "",
   gender: "",
   address: "",
   class: "1st",
@@ -64,6 +63,7 @@ const DEFAULT_VALUES: CreateStudentFormValues = {
   feeEndDate: "",
   useCustomInstallments: false,
   customInstallments: [],
+  branchId: "",
   photoUrl: "",
 };
 
@@ -77,6 +77,10 @@ export function StudentFormPage() {
   const sessionQuery = useAuthSession();
   const tenantType = sessionQuery.data?.tenant?.tenantType ?? "SCHOOL";
   const isSchool = tenantType === "SCHOOL";
+
+  const branchesQuery = useBranches({ enabled: sessionQuery.isSuccess });
+  const hasTenantBranches =
+    branchesQuery.isSuccess && (branchesQuery.data?.length ?? 0) > 0;
 
   const coursesQuery = useCourses(
     { limit: 100, includeInactive: false },
@@ -198,6 +202,7 @@ export function StudentFormPage() {
         studentId,
         values: valuesToSave,
         photoFile: pendingPhotoFile,
+        includeBranchInApiPayload: hasTenantBranches,
       });
       return;
     }
@@ -205,6 +210,7 @@ export function StudentFormPage() {
       values: valuesToSave,
       feeTemplateIsInstallment: selectedFeeTemplateDetails?.isInstallment,
       photoFile: pendingPhotoFile,
+      includeBranchInApiPayload: hasTenantBranches,
     });
   };
 
@@ -225,6 +231,17 @@ export function StudentFormPage() {
       .filter((c) => c.isActive)
       .map((c) => ({ value: c.id, label: c.name })),
   ];
+
+  const branchSelectOptions = useMemo(() => {
+    const rows = branchesQuery.data ?? [];
+    return [
+      { value: SELECT_EMPTY_VALUE, label: "Not set" },
+      ...rows.map((b) => ({
+        value: b.id,
+        label: b.code ? `${b.name} (${b.code})` : b.name,
+      })),
+    ];
+  }, [branchesQuery.data]);
 
   const feeTemplateIdWatch = watch("feeTemplateId");
   const useCustomInstallmentsWatch = watch("useCustomInstallments");
@@ -417,15 +434,6 @@ export function StudentFormPage() {
       <Card className="w-full transition-shadow duration-300">
         <div className="mb-6">
           <CardTitle>{isEdit ? "Edit student" : "Add student"}</CardTitle>
-          <CardDescription>
-            {isSchool
-              ? isEdit
-                ? "Update profile. Class and section are required for your organization."
-                : "Enter details. Class and section identify the student’s cohort."
-              : isEdit
-                ? "Update profile. A course from your catalog is required."
-                : "Enter details and assign an active course from your catalog."}
-          </CardDescription>
         </div>
 
         <form
@@ -433,28 +441,9 @@ export function StudentFormPage() {
           onSubmit={handleSubmit(onSubmit)}
           noValidate
         >
-          <Input
-            label="Student Name"
-            placeholder="John Doe"
-            {...register("studentName", {
-              required: "Student name is required",
-            })}
-            error={errors.studentName?.message}
-          />
-
-          <Input
-            label="Scholar Id / Roll No."
-            placeholder="Enter Scholar Id / Roll No."
-            {...register("scholarId")}
-            error={errors.scholarId?.message}
-          />
-
-          <input type="hidden" {...register("photoUrl")} />
-
           <div>
-            <p className="mb-2 text-sm font-medium text-foreground">Photo</p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-              <div className="flex shrink-0 flex-col items-center gap-2 sm:items-start">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex shrink-0 flex-col items-center gap-2 sm:items-center w-full">
                 <div className="relative h-28 w-28 overflow-hidden rounded-full border border-border bg-muted">
                   {displayPhotoSrc ? (
                     <img
@@ -476,7 +465,8 @@ export function StudentFormPage() {
                   >
                     {displayPhotoSrc ? "Change photo" : "Add photo"}
                   </Button>
-                  {(pendingPhotoFile || (photoUrlWatch ?? "").trim() !== "") && (
+                  {(pendingPhotoFile ||
+                    (photoUrlWatch ?? "").trim() !== "") && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -521,13 +511,29 @@ export function StudentFormPage() {
                     setPendingPhotoFile(file);
                   }}
                 />
+                <p className="max-w-md text-xs text-muted-foreground sm:pt-1">
+                  JPEG, PNG, WebP, or GIF · max 5 MB.
+                </p>
               </div>
-              <p className="max-w-md text-xs text-muted-foreground sm:pt-1">
-                JPEG, PNG, WebP, or GIF · max 5 MB. The file is uploaded to AWS
-                S3; the public URL is stored on this student profile.
-              </p>
             </div>
           </div>
+          <Input
+            label="Student Name"
+            placeholder="John Doe"
+            {...register("studentName", {
+              required: "Student name is required",
+            })}
+            error={errors.studentName?.message}
+          />
+
+          <Input
+            label="Scholar Id"
+            placeholder="Enter Scholar Id"
+            {...register("scholarId")}
+            error={errors.scholarId?.message}
+          />
+
+          <input type="hidden" {...register("photoUrl")} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
@@ -557,7 +563,7 @@ export function StudentFormPage() {
           </div>
 
           <Input
-            label="Alternate phone"
+            label="Emergency Contact"
             placeholder="Optional · 10 digits"
             inputMode="numeric"
             autoComplete="tel"
@@ -574,7 +580,7 @@ export function StudentFormPage() {
             error={errors.alternatePhone?.message}
           />
 
-          <Input
+          {/* <Input
             label="PAN"
             placeholder="e.g. ABCDE1234F"
             {...register("panNumber", {
@@ -585,13 +591,28 @@ export function StudentFormPage() {
               },
             })}
             error={errors.panNumber?.message}
-          />
+          /> */}
 
           <Input
             label="Date of birth"
             type="date"
             {...register("dateOfBirth")}
             error={errors.dateOfBirth?.message}
+          />
+
+          <Input
+            label="Age"
+            inputMode="decimal"
+            placeholder="Optional"
+            {...register("age", {
+              validate: (v) => {
+                const t = String(v ?? "").trim();
+                if (t === "") return true;
+                const n = Number(t);
+                return Number.isFinite(n) || "Enter a valid number";
+              },
+            })}
+            error={errors.age?.message}
           />
 
           <Controller
@@ -636,6 +657,30 @@ export function StudentFormPage() {
               </p>
             ) : null}
           </div>
+
+          {hasTenantBranches ? (
+            <Controller
+              name="branchId"
+              control={control}
+              render={({ field }) => (
+                <SelectField
+                  label="Branch"
+                  name={field.name}
+                  options={branchSelectOptions}
+                  value={
+                    !field.value || field.value === ""
+                      ? SELECT_EMPTY_VALUE
+                      : field.value
+                  }
+                  onValueChange={(v) =>
+                    field.onChange(v === SELECT_EMPTY_VALUE ? "" : v)
+                  }
+                  onBlur={field.onBlur}
+                  error={errors.branchId?.message}
+                />
+              )}
+            />
+          ) : null}
 
           {isSchool ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -779,6 +824,7 @@ export function StudentFormPage() {
                   step="1"
                   min={0}
                   max={100}
+                  hideNumberSpinners
                   label="Discount % (optional)"
                   placeholder="0"
                   {...register("feeTemplateDiscountPercent", {

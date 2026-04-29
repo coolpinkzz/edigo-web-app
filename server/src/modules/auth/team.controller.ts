@@ -29,6 +29,7 @@ export async function updateMember(req: Request, res: Response): Promise<void> {
     const updated = await teamService.updateTeamMember(tenantId, userId, {
       role: body.role,
       isActive: body.isActive,
+      branchIds: body.branchIds,
     });
     res.json({ member: updated });
   } catch (err) {

@@ -161,6 +161,13 @@ export function TemplatesListPage() {
                         >
                           Assign
                         </Link>
+                        {/* Edit Feature is not implemented properly yet */}
+                        {/* <Link
+                          to={`/fee-templates/${t.id}/edit`}
+                          className="text-sm font-medium text-primary hover:underline"
+                        >
+                          Edit
+                        </Link> */}
                         <button
                           type="button"
                           className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
