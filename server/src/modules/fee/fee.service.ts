@@ -94,6 +94,8 @@ export interface ListOverdueFeesParams {
 export interface OverdueFeeInstallmentRow {
   studentId: string;
   studentName: string;
+  /** Public profile photo URL when set on the student. */
+  photoUrl?: string;
   parentPhoneNumber: string;
   feeTitle: string;
   installmentAmount: number;
@@ -1362,6 +1364,9 @@ export async function listOverdueFees(
     rows.push({
       studentId: String(student._id),
       studentName: student.studentName,
+      ...(student.photoUrl?.trim()
+        ? { photoUrl: student.photoUrl.trim() }
+        : {}),
       parentPhoneNumber: student.parentPhoneNumber,
       feeTitle: fee.title,
       installmentAmount: inst.amount,
@@ -1398,6 +1403,9 @@ export async function listOverdueFees(
     rows.push({
       studentId: String(student._id),
       studentName: student.studentName,
+      ...(student.photoUrl?.trim()
+        ? { photoUrl: student.photoUrl.trim() }
+        : {}),
       parentPhoneNumber: student.parentPhoneNumber,
       feeTitle: fee.title,
       installmentAmount: fee.totalAmount,

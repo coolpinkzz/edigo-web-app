@@ -8,9 +8,11 @@ import {
 } from "../fee/fee.model";
 import { IInstallment, Installment } from "../fee/installment.model";
 import {
+  deriveFeeStatus,
   deriveFeeStatusFromInstallmentRows,
   serializeFee,
 } from "../fee/fee.service";
+import { startOfBusinessDay } from "../../config/timezone";
 import {
   BranchScope,
   mergeBranchScopeOnQuery,
@@ -107,7 +109,9 @@ function feeFilterExpression(
 ): Record<string, unknown> | null {
   const parts: Record<string, unknown>[] = [];
   if (feeStatuses?.length) {
-    parts.push({ $in: ["$$f.status", feeStatuses] });
+    parts.push({
+      $in: ["$$f._effectiveFeeStatus", feeStatuses],
+    });
   }
   if (feeTypes?.length) {
     parts.push({ $in: ["$$f.feeType", feeTypes] });
@@ -122,8 +126,156 @@ function feeDocDerivedStatus(
   instByFeeId: Map<string, IInstallment[]>,
 ): FeeStatus {
   const insts = instByFeeId.get(feeDoc._id.toString()) ?? [];
-  if (!feeDoc.isInstallment || insts.length === 0) return feeDoc.status;
-  return deriveFeeStatusFromInstallmentRows(feeDoc, insts);
+  if (feeDoc.isInstallment && insts.length > 0) {
+    return deriveFeeStatusFromInstallmentRows(feeDoc, insts);
+  }
+  if (!feeDoc.isInstallment) {
+    const paid = feeDoc.paidAmount ?? 0;
+    const pending = Math.max(0, feeDoc.totalAmount - paid);
+    return deriveFeeStatus(feeDoc.totalAmount, paid, pending, {
+      isInstallment: false,
+      endDate: feeDoc.endDate ?? undefined,
+    });
+  }
+  return feeDoc.status;
+}
+
+/**
+ * Same rules as `feeDocDerivedStatus`, as a `$addFields`-ready expression (`$$ROOT` = fee doc,
+ * `_aggInstRows` = installments from a prior `$lookup`).
+ */
+function feeOverviewEffectiveFeeStatusExpr(
+  todayStart: Date,
+): Record<string, unknown> {
+  const installmentDerived: Record<string, unknown> = {
+    $let: {
+      vars: {
+        sumPaid: {
+          $reduce: {
+            input: "$_aggInstRows",
+            initialValue: 0,
+            in: { $add: ["$$value", "$$this.paidAmount"] },
+          },
+        },
+      },
+      in: {
+        $let: {
+          vars: {
+            pendingAmt: {
+              $max: [0, { $subtract: ["$totalAmount", "$$sumPaid"] }],
+            },
+            anyOverdue: {
+              $gt: [
+                {
+                  $size: {
+                    $filter: {
+                      input: "$_aggInstRows",
+                      as: "i",
+                      cond: {
+                        $and: [
+                          { $lt: ["$$i.dueDate", todayStart] },
+                          { $lt: ["$$i.paidAmount", "$$i.amount"] },
+                        ],
+                      },
+                    },
+                  },
+                },
+                0,
+              ],
+            },
+          },
+          in: {
+            $cond: [
+              {
+                $or: [
+                  { $lte: ["$$pendingAmt", 0] },
+                  { $gte: ["$$sumPaid", "$totalAmount"] },
+                ],
+              },
+              "PAID",
+              {
+                $cond: [
+                  { $gt: ["$$sumPaid", 0] },
+                  "PARTIAL",
+                  {
+                    $cond: ["$$anyOverdue", "OVERDUE", "PENDING"],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  const lumpSumDerived: Record<string, unknown> = {
+    $let: {
+      vars: {
+        paid: { $ifNull: ["$paidAmount", 0] },
+      },
+      in: {
+        $let: {
+          vars: {
+            pendingAmt: {
+              $max: [0, { $subtract: ["$totalAmount", "$$paid"] }],
+            },
+          },
+          in: {
+            $cond: [
+              {
+                $or: [
+                  { $lte: ["$$pendingAmt", 0] },
+                  { $gte: ["$$paid", "$totalAmount"] },
+                ],
+              },
+              "PAID",
+              {
+                $cond: [
+                  { $gt: ["$$paid", 0] },
+                  "PARTIAL",
+                  {
+                    $cond: [
+                      {
+                        $and: [
+                          {
+                            $not: [{ $eq: ["$endDate", null] }],
+                          },
+                          { $lt: ["$endDate", todayStart] },
+                          { $gt: ["$$pendingAmt", 0] },
+                        ],
+                      },
+                      "OVERDUE",
+                      "PENDING",
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  return {
+    $cond: [
+      {
+        $and: [
+          { $eq: ["$isInstallment", true] },
+          { $gt: [{ $size: "$_aggInstRows" }, 0] },
+        ],
+      },
+      installmentDerived,
+      {
+        $cond: [
+          { $eq: ["$isInstallment", false] },
+          lumpSumDerived,
+          "$status",
+        ],
+      },
+    ],
+  };
 }
 
 /**
@@ -165,6 +317,47 @@ export async function listStudentFeeOverview(
   }
 
   const filterExpr = feeFilterExpression(params.feeStatuses, params.feeTypes);
+  /** Only when filtering by stored+derived fee status — mirrors list response and avoids unnecessary installment reads. */
+  const needsAggDerivedFeeStatus = Boolean(params.feeStatuses?.length);
+
+  const feeLookupInnerPipeline = [
+    {
+      $match: {
+        $expr: {
+          $and: [
+            { $eq: ["$tenantId", tenantId] },
+            { $eq: ["$studentId", "$$sid"] },
+          ],
+        },
+      },
+    },
+    ...(needsAggDerivedFeeStatus
+      ? [
+          {
+            $lookup: {
+              from: "installments",
+              let: { fid: { $toString: "$_id" } },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ["$feeId", "$$fid"] },
+                  },
+                },
+              ],
+              as: "_aggInstRows",
+            },
+          },
+          {
+            $addFields: {
+              _effectiveFeeStatus: feeOverviewEffectiveFeeStatusExpr(
+                startOfBusinessDay(new Date()),
+              ),
+            },
+          },
+          { $project: { _aggInstRows: 0 } },
+        ]
+      : []),
+  ];
 
   const pipeline: PipelineStage[] = [
     { $match: studentMatch },
@@ -172,18 +365,7 @@ export async function listStudentFeeOverview(
       $lookup: {
         from: "fees",
         let: { sid: { $toString: "$_id" } },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ["$tenantId", tenantId] },
-                  { $eq: ["$studentId", "$$sid"] },
-                ],
-              },
-            },
-          },
-        ],
+        pipeline: feeLookupInnerPipeline,
         as: "fees",
       },
     },
