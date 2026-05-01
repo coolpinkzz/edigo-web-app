@@ -1,7 +1,11 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, Filter, FilterX } from "lucide-react";
-import { FeeStatusBadge } from "../components/FeeStatusBadge";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronsUpDown,
+} from "lucide-react";
 import {
   Button,
   Card,
@@ -21,6 +25,7 @@ import {
   type FeeStatus,
   type FeeType,
   type StudentClass,
+  type StudentFeeOverviewSortBy,
   type StudentSection,
 } from "../types";
 import { cn, formatInr, getErrorMessage } from "../utils";
@@ -42,6 +47,92 @@ function feeDueByLabel(f: FeeDto): string {
   });
 }
 
+function initialFromName(name: string): string {
+  const t = name.trim();
+  const ch = t.charAt(0);
+  return ch ? ch.toUpperCase() : "?";
+}
+
+function StudentAvatar({
+  name,
+  photoUrl,
+}: {
+  name: string;
+  photoUrl?: string;
+}) {
+  const trimmed = photoUrl?.trim();
+  const [broken, setBroken] = useState(false);
+
+  if (trimmed && !broken) {
+    return (
+      <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full bg-primary/15 ring-1 ring-border/60">
+        <img
+          src={trimmed}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-primary"
+      aria-hidden
+    >
+      {initialFromName(name)}
+    </span>
+  );
+}
+
+function RollupBadge({
+  status,
+  label,
+}: {
+  status: FeeStatus | null;
+  label: string;
+}) {
+  const tones = (() => {
+    if (status == null)
+      return "border border-border bg-muted/60 text-muted-foreground";
+    switch (status) {
+      case "PARTIAL":
+        return "bg-[#FFF3BF] text-[#ca6f0a]";
+      case "OVERDUE":
+        return "bg-[#FFE3E3] text-[#C92A2A]";
+      case "PENDING":
+        return "border border-primary/35 bg-accent/80 text-accent-foreground";
+      case "PAID":
+        return "border border-primary/50 bg-primary/15 text-[#134e4a]";
+      default:
+        return "border border-border bg-muted/60 text-muted-foreground";
+    }
+  })();
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+        tones,
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function studentIdSubtitle(s: {
+  scholarId?: string;
+  admissionId?: string;
+}): string | null {
+  const sch = s.scholarId?.trim();
+  if (sch) return `Student ID · ${sch}`;
+  const adm = s.admissionId?.trim();
+  if (adm) return `Student ID · ${adm}`;
+  return null;
+}
+
 /**
  * Command center: students with fee aggregates, filters, and expandable fee lines.
  */
@@ -54,10 +145,11 @@ export function FeeOverviewPage() {
   const [sectionFilter, setSectionFilter] = useState<"" | StudentSection>("");
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebouncedString(searchInput, 300);
-  const [feeStatusFilters, setFeeStatusFilters] = useState<FeeStatus[]>([]);
-  const [feeTypeFilters, setFeeTypeFilters] = useState<FeeType[]>([]);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [feeStatusFilter, setFeeStatusFilter] = useState<"" | FeeStatus>("");
+  const [feeTypeFilter, setFeeTypeFilter] = useState<"" | FeeType>("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [sortBy, setSortBy] = useState<StudentFeeOverviewSortBy>("studentName");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     setPage(1);
@@ -69,9 +161,21 @@ export function FeeOverviewPage() {
     class: isSchool ? classFilter || undefined : undefined,
     section: isSchool ? sectionFilter || undefined : undefined,
     search: debouncedSearch || undefined,
-    feeStatuses: feeStatusFilters.length ? feeStatusFilters : undefined,
-    feeTypes: feeTypeFilters.length ? feeTypeFilters : undefined,
+    feeStatuses: feeStatusFilter ? [feeStatusFilter] : undefined,
+    feeTypes: feeTypeFilter ? [feeTypeFilter] : undefined,
+    sortBy,
+    sortDir,
   });
+
+  const toggleSort = (column: StudentFeeOverviewSortBy) => {
+    setPage(1);
+    if (sortBy === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir("asc");
+    }
+  };
 
   const toggleExpanded = (studentId: string) => {
     setExpanded((prev) => {
@@ -96,26 +200,22 @@ export function FeeOverviewPage() {
     ...STUDENT_SECTION_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
   ];
 
-  const toggleFeeStatus = (value: FeeStatus) => {
-    setFeeStatusFilters((prev) =>
-      prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value],
-    );
-    setPage(1);
-  };
+  const feeStatusSelectOptions = [
+    { value: SELECT_EMPTY_VALUE, label: "All statuses" },
+    ...FEE_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+  ];
 
-  const toggleFeeType = (value: FeeType) => {
-    setFeeTypeFilters((prev) =>
-      prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value],
-    );
-    setPage(1);
-  };
+  const feeTypeSelectOptions = [
+    { value: SELECT_EMPTY_VALUE, label: "All types" },
+    ...FEE_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+  ];
 
   const clearFilters = () => {
     setClassFilter("");
     setSectionFilter("");
     setSearchInput("");
-    setFeeStatusFilters([]);
-    setFeeTypeFilters([]);
+    setFeeStatusFilter("");
+    setFeeTypeFilter("");
     setPage(1);
   };
 
@@ -123,8 +223,56 @@ export function FeeOverviewPage() {
     debouncedSearch.trim() !== "" ||
     (isSchool && classFilter !== "") ||
     (isSchool && sectionFilter !== "") ||
-    feeStatusFilters.length > 0 ||
-    feeTypeFilters.length > 0;
+    feeStatusFilter !== "" ||
+    feeTypeFilter !== "";
+
+  function SortableHeader({
+    label,
+    column,
+    className,
+  }: {
+    label: string;
+    column: StudentFeeOverviewSortBy;
+    className?: string;
+  }) {
+    const active = sortBy === column;
+    return (
+      <th scope="col" className={className}>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex w-full items-center justify-start gap-1.5 pb-3 pt-3 text-left text-sm font-semibold text-accent-foreground",
+            !active && "opacity-95",
+          )}
+          onClick={() => toggleSort(column)}
+        >
+          <span>{label}</span>
+          {active ? (
+            sortDir === "asc" ? (
+              <ArrowUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            ) : (
+              <ArrowDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            )
+          ) : (
+            <ChevronsUpDown
+              className="h-3.5 w-3.5 shrink-0 opacity-45"
+              aria-hidden
+            />
+          )}
+          <span className="sr-only">
+            {active
+              ? sortDir === "asc"
+                ? "sorted ascending"
+                : "sorted descending"
+              : "sort"}
+          </span>
+        </button>
+      </th>
+    );
+  }
+
+  const headerMuted =
+    "px-6 pb-3 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -141,176 +289,103 @@ export function FeeOverviewPage() {
       </div> */}
 
       <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-              filtersOpen
-                ? "border-primary bg-primary/10 text-foreground"
-                : "border-border bg-background text-foreground hover:bg-muted",
-            )}
-            aria-expanded={filtersOpen}
-            aria-controls="fee-overview-filters"
-            id="fee-overview-filters-toggle"
-          >
-            <Filter
-              className="h-4 w-4 shrink-0 text-muted-foreground"
-              aria-hidden
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="min-w-0 flex-1 sm:min-w-56">
+            <Input
+              label="Search"
+              name="fee-overview-search"
+              placeholder="Name, scholar ID…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              autoComplete="off"
+              aria-label="Search students"
             />
-            {filtersOpen ? "Hide filters" : "Show filters"}
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-out motion-reduce:transition-none",
-                filtersOpen && "rotate-180",
-              )}
-              aria-hidden
-            />
-          </button>
-          {hasActiveFilters && !filtersOpen ? (
-            <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
-              Filters active
-            </span>
-          ) : null}
-          {hasActiveFilters ? (
-            <Button
-              type="button"
-              variant="secondary"
-              className="gap-2"
-              onClick={clearFilters}
-            >
-              <FilterX className="h-4 w-4 shrink-0" aria-hidden />
-              Reset filters
-            </Button>
-          ) : null}
-        </div>
-
-        <div
-          className={cn(
-            "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
-            filtersOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-          )}
-        >
-          <div className="min-h-0 overflow-hidden">
-            <div
-              id="fee-overview-filters"
-              role="region"
-              aria-labelledby="fee-overview-filters-toggle"
-              aria-hidden={!filtersOpen}
-              inert={!filtersOpen}
-              className={cn(
-                "mt-4 space-y-4 border-t border-border pt-4 transition-opacity duration-300 ease-out motion-reduce:transition-none",
-                filtersOpen ? "opacity-100" : "opacity-0",
-              )}
-            >
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Search
-                  </label>
-                  <Input
-                    placeholder="Name, scholar ID…"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    aria-label="Search students"
-                  />
-                </div>
-                {isSchool && (
-                  <>
-                    <div>
-                      <SelectField
-                        label="Class"
-                        options={classOptions}
-                        value={
-                          classFilter === "" ? SELECT_EMPTY_VALUE : classFilter
-                        }
-                        onValueChange={(v) => {
-                          setClassFilter(
-                            v === SELECT_EMPTY_VALUE ? "" : (v as StudentClass),
-                          );
-                          setPage(1);
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <SelectField
-                        label="Section"
-                        options={sectionOptions}
-                        value={
-                          sectionFilter === ""
-                            ? SELECT_EMPTY_VALUE
-                            : sectionFilter
-                        }
-                        onValueChange={(v) => {
-                          setSectionFilter(
-                            v === SELECT_EMPTY_VALUE
-                              ? ""
-                              : (v as StudentSection),
-                          );
-                          setPage(1);
-                        }}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-                <div className="min-w-0 flex-1">
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">
-                    Fee status (match any selected — same fee row)
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {FEE_STATUS_OPTIONS.map((opt) => {
-                      const on = feeStatusFilters.includes(opt.value);
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => toggleFeeStatus(opt.value)}
-                          className={cn(
-                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                            on
-                              ? "border-primary bg-primary/15 text-foreground"
-                              : "border-border bg-background text-muted-foreground hover:bg-muted",
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">
-                    Fee type
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {FEE_TYPE_OPTIONS.map((opt) => {
-                      const on = feeTypeFilters.includes(opt.value);
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => toggleFeeType(opt.value)}
-                          className={cn(
-                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                            on
-                              ? "border-primary bg-primary/15 text-foreground"
-                              : "border-border bg-background text-muted-foreground hover:bg-muted",
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
+          <div className="w-full min-w-0 sm:min-w-44 sm:max-w-56">
+            <SelectField
+              label="Fee status"
+              name="fee-overview-status"
+              options={feeStatusSelectOptions}
+              value={
+                feeStatusFilter === ""
+                  ? SELECT_EMPTY_VALUE
+                  : feeStatusFilter
+              }
+              onValueChange={(v) => {
+                setPage(1);
+                setFeeStatusFilter(
+                  v === SELECT_EMPTY_VALUE ? "" : (v as FeeStatus),
+                );
+              }}
+            />
+          </div>
+          <div className="w-full min-w-0 sm:min-w-44 sm:max-w-56">
+            <SelectField
+              label="Fee type"
+              name="fee-overview-type"
+              options={feeTypeSelectOptions}
+              value={
+                feeTypeFilter === "" ? SELECT_EMPTY_VALUE : feeTypeFilter
+              }
+              onValueChange={(v) => {
+                setPage(1);
+                setFeeTypeFilter(
+                  v === SELECT_EMPTY_VALUE ? "" : (v as FeeType),
+                );
+              }}
+            />
+          </div>
+          {isSchool && (
+            <>
+              <div className="w-full min-w-0 sm:min-w-44 sm:max-w-48">
+                <SelectField
+                  label="Class"
+                  name="fee-overview-class"
+                  options={classOptions}
+                  value={
+                    classFilter === "" ? SELECT_EMPTY_VALUE : classFilter
+                  }
+                  onValueChange={(v) => {
+                    setClassFilter(
+                      v === SELECT_EMPTY_VALUE ? "" : (v as StudentClass),
+                    );
+                    setPage(1);
+                  }}
+                />
+              </div>
+              <div className="w-full min-w-0 sm:min-w-44 sm:max-w-48">
+                <SelectField
+                  label="Section"
+                  name="fee-overview-section"
+                  options={sectionOptions}
+                  value={
+                    sectionFilter === ""
+                      ? SELECT_EMPTY_VALUE
+                      : sectionFilter
+                  }
+                  onValueChange={(v) => {
+                    setSectionFilter(
+                      v === SELECT_EMPTY_VALUE
+                        ? ""
+                        : (v as StudentSection),
+                    );
+                    setPage(1);
+                  }}
+                />
+              </div>
+            </>
+          )}
+          {hasActiveFilters ? (
+            <div className="flex shrink-0 pb-0.5 sm:ml-auto">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={clearFilters}
+              >
+                Reset filters
+              </Button>
+            </div>
+          ) : null}
         </div>
       </Card>
 
@@ -323,264 +398,263 @@ export function FeeOverviewPage() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-card-border bg-card shadow-md shadow-black/[0.06]">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-primary-gradient text-primary-foreground">
-            <tr className="border-b border-border">
-              <th
-                className="w-10 px-3 py-3 font-medium text-primary-foreground"
-                scope="col"
-              />
-              <th
-                className="px-3 py-3 font-medium text-primary-foreground"
-                scope="col"
-              >
-                Student
-              </th>
-              <th
-                className="px-3 py-3 font-medium text-primary-foreground"
-                scope="col"
-              >
-                {isSchool ? "Class" : "Course"}
-              </th>
-              <th
-                className="px-3 py-3 font-medium text-primary-foreground"
-                scope="col"
-              >
-                Rollup
-              </th>
-              <th
-                className="px-3 py-3 font-medium text-primary-foreground"
-                scope="col"
-              >
-                Pending
-              </th>
-              <th
-                className="px-3 py-3 font-medium text-primary-foreground"
-                scope="col"
-              >
-                Fees
-              </th>
-            </tr>
-          </thead>
-          <tbody className="text-base font-semibold text-foreground">
-            {isLoading && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-3 py-8 text-center font-normal text-muted-foreground"
-                >
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {!isLoading && data && data.data.length === 0 && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-3 py-8 text-center font-normal text-muted-foreground"
-                >
-                  No students match your filters.
-                </td>
-              </tr>
-            )}
-            {!isLoading &&
-              data?.data.map((row) => {
-                const { student, fees, feeSummary } = row;
-                const isOpen = expanded.has(student.id);
-                return (
-                  <Fragment key={student.id}>
-                    <tr
-                      className="cursor-pointer border-b border-border/80 hover:bg-muted/30"
-                      onClick={() => toggleExpanded(student.id)}
-                    >
-                      <td className="px-1 py-2 align-middle">
-                        <button
-                          type="button"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            toggleExpanded(student.id);
-                          }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                          aria-expanded={isOpen}
-                          aria-label={
-                            isOpen
-                              ? `Collapse fees for ${student.studentName}`
-                              : `Expand fees for ${student.studentName}`
-                          }
-                        >
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition-transform duration-300 ease-out motion-reduce:transition-none",
-                              isOpen && "rotate-180",
-                            )}
-                          />
-                        </button>
-                      </td>
-                      <td className="px-3 py-2 align-middle">
-                        <Link
-                          to={`/students/${student.id}`}
-                          className="text-primary hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {student.studentName}
-                        </Link>
-                        {student.scholarId ? (
-                          <p className="text-xs text-muted-foreground">
-                            {student.scholarId}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 align-middle tabular-nums text-muted-foreground">
-                        {isSchool
-                          ? `${student.class ?? "—"} · ${student.section ?? "—"}`
-                          : (student.course?.name ?? student.courseId ?? "—")}
-                      </td>
-                      <td className="px-3 py-2 align-middle">
-                        <FeeStatusBadge status={feeSummary.rollupStatus}>
-                          {feeStatusLabel(feeSummary.rollupStatus)}
-                        </FeeStatusBadge>
-                      </td>
-                      <td className="px-3 py-2 align-middle tabular-nums">
-                        {formatInr(feeSummary.pendingTotal)}
-                      </td>
-                      <td className="px-3 py-2 align-middle tabular-nums text-muted-foreground">
-                        {feeSummary.feeCount}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-border/80 bg-muted/20">
-                      <td colSpan={6} className="p-0">
-                        <div
-                          className={cn(
-                            "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
-                            isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-                          )}
-                        >
-                          <div className="min-h-0 overflow-hidden">
-                            <div
-                              className={cn(
-                                "px-3 py-3 transition-opacity duration-300 ease-out motion-reduce:transition-none",
-                                isOpen ? "opacity-100" : "opacity-0",
-                              )}
-                              aria-hidden={!isOpen}
-                              inert={!isOpen}
-                            >
-                              {fees.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                  No fee records.
+      <Card className="overflow-hidden border-card-border p-0! shadow-md shadow-black/6">
+        {isLoading && (
+          <p className="px-6 py-8 text-sm text-muted-foreground">Loading…</p>
+        )}
+
+        {!isLoading && !isError && data && data.data.length === 0 && (
+          <p className="px-6 py-8 text-sm text-muted-foreground">
+            No students match your filters.
+          </p>
+        )}
+
+        {!isLoading && !isError && data && data.data.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-4xl text-left">
+              <thead>
+                <tr className="border-b border-card-border bg-primary/10">
+                  <SortableHeader
+                    column="studentName"
+                    label="Student"
+                    className="px-6"
+                  />
+                  {isSchool ? (
+                    <SortableHeader column="class" label="Class" />
+                  ) : (
+                    <th scope="col" className="px-6 pb-3 pt-3 align-bottom">
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent-foreground">
+                        Course
+                      </span>
+                    </th>
+                  )}
+                  <th scope="col" className={headerMuted}>
+                    <span className="normal-case font-bold tracking-normal">
+                      Rollup
+                    </span>
+                  </th>
+                  <SortableHeader
+                    column="pendingTotal"
+                    label="Pending"
+                    className="px-6"
+                  />
+                  <th scope="col" className={cn(headerMuted, "tabular-nums")}>
+                    <span className="normal-case tracking-normal">Fees</span>
+                  </th>
+                  <th
+                    scope="col"
+                    className="whitespace-nowrap px-6 pb-3 pt-3 text-right align-bottom text-accent-foreground"
+                  >
+                    <span className="text-sm font-semibold">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.data.map((row) => {
+                  const { student, fees, feeSummary } = row;
+                  const idLine = studentIdSubtitle(student);
+                  const open = expanded.has(student.id);
+                  const courseDisplay = isSchool
+                    ? `${student.class ?? "—"} · ${student.section ?? "—"}`
+                    : (student.course?.name ?? student.courseId) || "—";
+
+                  return (
+                    <Fragment key={student.id}>
+                      <tr className="border-b border-card-border bg-card hover:bg-muted/40">
+                        <td className="px-6 py-4 align-middle">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <StudentAvatar
+                              name={student.studentName}
+                              photoUrl={student.photoUrl}
+                            />
+                            <div className="min-w-0">
+                              <Link
+                                to={`/students/${student.id}`}
+                                className="truncate font-semibold text-foreground hover:text-primary hover:underline"
+                              >
+                                {student.studentName}
+                              </Link>
+                              {idLine ? (
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {idLine}
                                 </p>
-                              ) : (
-                                <div className="overflow-x-auto rounded-lg border border-card-border bg-background shadow-md shadow-black/[0.05]">
-                                  <table className="w-full min-w-[520px] text-sm">
-                                    <thead className="bg-primary-gradient text-primary-foreground">
-                                      <tr className="border-b border-border text-left">
-                                        <th className="px-2 py-2 font-semibold">
-                                          Title
-                                        </th>
-                                        <th className="px-2 py-2 font-semibold">
-                                          Type
-                                        </th>
-                                        <th className="px-2 py-2 font-semibold">
-                                          Status
-                                        </th>
-                                        <th className="px-2 py-2 font-semibold">
-                                          Total
-                                        </th>
-                                        <th className="px-2 py-2 font-semibold">
-                                          Paid
-                                        </th>
-                                        <th className="px-2 py-2 font-semibold">
-                                          Pending
-                                        </th>
-                                        <th className="px-2 py-2 font-semibold">
-                                          Due by
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="font-semibold text-foreground">
-                                      {fees.map((f) => (
-                                        <tr
-                                          key={f.id}
-                                          className="border-b border-border/60 last:border-0"
-                                        >
-                                          <td className="px-2 py-2">
-                                            <Link
-                                              to={`/students/${student.id}`}
-                                              className="text-primary hover:underline"
-                                            >
-                                              {f.title}
-                                            </Link>
-                                          </td>
-                                          <td className="px-2 py-2 text-muted-foreground">
-                                            {f.feeType}
-                                          </td>
-                                          <td className="px-2 py-2">
-                                            <FeeStatusBadge
-                                              status={f.status}
-                                              variant="compact"
-                                            >
-                                              {feeStatusLabel(f.status)}
-                                            </FeeStatusBadge>
-                                          </td>
-                                          <td className="px-2 py-2 tabular-nums">
-                                            {formatInr(f.totalAmount)}
-                                          </td>
-                                          <td className="px-2 py-2 tabular-nums text-muted-foreground">
-                                            {formatInr(f.paidAmount)}
-                                          </td>
-                                          <td className="px-2 py-2 tabular-nums">
-                                            {formatInr(f.pendingAmount)}
-                                          </td>
-                                          <td className="px-2 py-2 text-muted-foreground font-normal">
-                                            {feeDueByLabel(f)}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
+                              ) : null}
                             </div>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </Fragment>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
-
-      {data && data.total > 0 && (
-        <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
-          <p className="text-sm text-muted-foreground">
-            Showing {(page - 1) * PAGE_SIZE + 1}–
-            {Math.min(page * PAGE_SIZE, data.total)} of {data.total}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!canPrev}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <span className="text-sm tabular-nums text-muted-foreground">
-              Page {page} / {totalPages || 1}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!canNext}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
+                        </td>
+                        <td className="px-6 py-4 align-middle text-sm text-muted-foreground">
+                          {courseDisplay}
+                        </td>
+                        <td className="px-6 py-4 align-middle">
+                          <RollupBadge
+                            status={feeSummary.rollupStatus}
+                            label={feeStatusLabel(feeSummary.rollupStatus)}
+                          />
+                        </td>
+                        <td className="px-6 py-4 align-middle text-sm font-semibold tabular-nums text-foreground">
+                          {formatInr(feeSummary.pendingTotal)}
+                        </td>
+                        <td className="px-6 py-4 align-middle text-sm font-semibold tabular-nums text-foreground">
+                          {feeSummary.feeCount}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right align-middle">
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-card-border bg-white text-muted-foreground shadow-xs motion-reduce:transition-none",
+                              "transition-all duration-200 ease-out hover:bg-muted hover:text-foreground active:scale-95 motion-reduce:active:scale-100",
+                            )}
+                            onClick={() => toggleExpanded(student.id)}
+                            aria-expanded={open}
+                            aria-label={
+                              open
+                                ? `Collapse fees for ${student.studentName}`
+                                : `Expand fees for ${student.studentName}`
+                            }
+                          >
+                            <ChevronDown
+                              className={cn(
+                                "h-4 w-4 motion-reduce:transition-none",
+                                "transition-transform duration-300 ease-out motion-reduce:duration-150",
+                                open && "rotate-180",
+                              )}
+                            />
+                          </button>
+                        </td>
+                      </tr>
+                      <tr className={cn(open && "border-b border-card-border")}>
+                        <td colSpan={6} className="p-0 align-top">
+                          <div
+                            className={cn(
+                              "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
+                              open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                            )}
+                          >
+                            <div className="min-h-0 overflow-hidden">
+                              <div
+                                className={cn(
+                                  "px-6 pb-4 pt-0 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+                                  open ? "opacity-100 delay-75" : "opacity-0",
+                                )}
+                                aria-hidden={!open}
+                                inert={!open ? true : undefined}
+                              >
+                                <div className="overflow-hidden rounded-lg pt-4">
+                                  {fees.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                      No fee records.
+                                    </p>
+                                  ) : (
+                                    <div className="overflow-x-auto rounded-md border border-border/80 bg-background">
+                                      <table className="min-w-3xl w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b border-card-border bg-muted/15">
+                                            <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
+                                              Title
+                                            </th>
+                                            <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
+                                              Type
+                                            </th>
+                                            <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
+                                              Status
+                                            </th>
+                                            <th className="px-3 py-2.5 text-right text-xs font-medium text-muted-foreground tabular-nums">
+                                              Total
+                                            </th>
+                                            <th className="px-3 py-2.5 text-right text-xs font-medium text-muted-foreground tabular-nums">
+                                              Paid
+                                            </th>
+                                            <th className="px-3 py-2.5 text-right text-xs font-medium text-muted-foreground tabular-nums">
+                                              Pending
+                                            </th>
+                                            <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
+                                              Due by
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-card-border">
+                                          {fees.map((f: FeeDto) => (
+                                            <tr
+                                              key={f.id}
+                                              className="bg-background"
+                                            >
+                                              <td className="px-3 py-3 align-middle font-medium text-primary">
+                                                <Link
+                                                  to={`/students/${student.id}`}
+                                                  className="hover:underline"
+                                                >
+                                                  {f.title}
+                                                </Link>
+                                              </td>
+                                              <td className="px-3 py-3 align-middle font-medium uppercase text-muted-foreground">
+                                                {f.feeType.replace(/_/g, " ")}
+                                              </td>
+                                              <td className="px-3 py-3 align-middle">
+                                                <RollupBadge
+                                                  status={f.status}
+                                                  label={feeStatusLabel(
+                                                    f.status,
+                                                  )}
+                                                />
+                                              </td>
+                                              <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
+                                                {formatInr(f.totalAmount)}
+                                              </td>
+                                              <td className="px-3 py-3 text-right font-medium tabular-nums text-primary">
+                                                {formatInr(f.paidAmount)}
+                                              </td>
+                                              <td className="px-3 py-3 text-right tabular-nums text-foreground">
+                                                {formatInr(f.pendingAmount)}
+                                              </td>
+                                              <td className="px-3 py-3 align-middle text-muted-foreground">
+                                                {feeDueByLabel(f)}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+
+        {!isLoading && !isError && data && data.totalPages > 1 && (
+          <div className="flex flex-col items-stretch justify-between gap-3 border-t border-card-border px-6 py-4 sm:flex-row sm:items-center">
+            <p className="text-sm text-muted-foreground">
+              Page {data.page} of {data.totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!canPrev}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!canNext}
+                onClick={() => setPage((p) => (canNext ? p + 1 : p))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

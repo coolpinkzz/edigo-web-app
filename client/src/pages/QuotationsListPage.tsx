@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card } from "../components/ui";
+import {
+  Button,
+  Card,
+  SELECT_EMPTY_VALUE,
+  SelectField,
+} from "../components/ui";
 import { useQuotations } from "../hooks/useQuotations";
 import { useBranches } from "../hooks/useBranches";
 import { getErrorMessage } from "../utils";
@@ -27,14 +32,26 @@ export function QuotationsListPage() {
     limit: 50,
   });
 
+  const branchOptions = [
+    { value: SELECT_EMPTY_VALUE, label: "All branches" },
+    ...(branchesQuery.data ?? []).map((b) => ({
+      value: b.id,
+      label: b.name,
+    })),
+  ];
+
+  const statusOptions = STATUS_OPTIONS.map((o) => ({
+    value: o.value === "" ? SELECT_EMPTY_VALUE : o.value,
+    label: o.label,
+  }));
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Quotations</h1>
           <p className="text-sm text-muted-foreground">
-            Lead quotes with PDF and SMS delivery. Discount is a percentage of
-            the selected fee structure total.
+            Lead quotes with PDF and SMS delivery.
           </p>
         </div>
         <Link to="/quotations/new">
@@ -44,39 +61,27 @@ export function QuotationsListPage() {
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[160px]">
-          <label className="mb-1 block text-sm font-medium text-foreground/80">
-            Branch
-          </label>
-          <select
-            className="block w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
-          >
-            <option value="">All branches</option>
-            {(branchesQuery.data ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            label="Branch"
+            name="filter-quotation-branch"
+            options={branchOptions}
+            value={branchId === "" ? SELECT_EMPTY_VALUE : branchId}
+            onValueChange={(v) =>
+              setBranchId(v === SELECT_EMPTY_VALUE ? "" : v)
+            }
+            disabled={branchesQuery.isLoading}
+          />
         </div>
         <div className="min-w-[160px]">
-          <label className="mb-1 block text-sm font-medium text-foreground/80">
-            Status
-          </label>
-          <select
-            className="block w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            value={status}
-            onChange={(e) =>
-              setStatus(e.target.value as QuotationStatus | "")
+          <SelectField
+            label="Status"
+            name="filter-quotation-status"
+            options={statusOptions}
+            value={status === "" ? SELECT_EMPTY_VALUE : status}
+            onValueChange={(v) =>
+              setStatus(v === SELECT_EMPTY_VALUE ? "" : (v as QuotationStatus))
             }
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value || "all"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          />
         </div>
       </div>
 

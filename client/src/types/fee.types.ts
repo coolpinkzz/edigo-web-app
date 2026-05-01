@@ -63,6 +63,8 @@ export interface PaginatedFees {
 export interface OverdueFeeInstallmentRow {
   studentId: string;
   studentName: string;
+  /** Present when student has profile photo URL. */
+  photoUrl?: string;
   parentPhoneNumber: string;
   feeTitle: string;
   installmentAmount: number;

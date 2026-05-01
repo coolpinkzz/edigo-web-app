@@ -70,6 +70,8 @@ export interface StudentDto {
   /** Set when the student is tied to a campus; omitted for legacy or single-site tenants. */
   branchId?: string;
   studentName: string;
+  /** Optional display id (school). */
+  admissionId?: string;
   scholarId?: string;
   parentName: string;
   parentPhoneNumber: string;

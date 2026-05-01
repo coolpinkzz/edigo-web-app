@@ -44,6 +44,46 @@ function formatDate(iso: string): string {
   });
 }
 
+function initialFromName(name: string): string {
+  const t = name.trim();
+  const ch = t.charAt(0);
+  return ch ? ch.toUpperCase() : "?";
+}
+
+function StudentAvatar({
+  name,
+  photoUrl,
+}: {
+  name: string;
+  photoUrl?: string;
+}) {
+  const trimmed = photoUrl?.trim();
+  const [broken, setBroken] = useState(false);
+
+  if (trimmed && !broken) {
+    return (
+      <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full bg-primary/15 ring-1 ring-border/60">
+        <img
+          src={trimmed}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-primary"
+      aria-hidden
+    >
+      {initialFromName(name)}
+    </span>
+  );
+}
+
 function rowToneClass(days: number): string {
   if (days <= 7) return "bg-amber-50 hover:bg-amber-100";
   if (days <= 30) return "bg-red-100 hover:bg-red-200";
@@ -283,7 +323,7 @@ export function OverduePage() {
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
-        <div className="min-w-[12rem]">
+        <div className="min-w-48">
           {isSchool ? (
             <SelectField
               label="Class"
@@ -311,7 +351,7 @@ export function OverduePage() {
             />
           )}
         </div>
-        <div className="min-w-[12rem]">
+        <div className="min-w-48">
           <SelectField
             label="Fee type"
             name="filter-fee-type"
@@ -336,7 +376,7 @@ export function OverduePage() {
         </div>
       </div>
 
-      <Card className="overflow-hidden p-0!">
+      <Card className="overflow-hidden border-card-border p-0! shadow-md shadow-black/6">
         {/* <div className="border-b border-border px-6 py-4">
           <CardTitle className="text-lg">Overdue fees</CardTitle>
           <CardDescription>
@@ -372,61 +412,106 @@ export function OverduePage() {
 
         {!isLoading && !isError && data && data.data.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] text-left text-sm">
-              <thead className="border-b border-border bg-primary-gradient text-xs uppercase tracking-wide text-primary-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Student</th>
-                  <th className="px-4 py-3 font-medium">Fee</th>
-                  <th className="px-4 py-3 font-medium text-right">Pending</th>
-                  <th className="px-4 py-3 font-medium">Due date</th>
-                  <th className="px-4 py-3 font-medium">Days overdue</th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+            <table className="w-full min-w-4xl text-left text-sm">
+              <thead>
+                <tr className="border-b border-card-border bg-primary/10">
+                  <th
+                    scope="col"
+                    className="px-6 pb-3 pt-3 text-left text-sm font-semibold text-accent-foreground"
+                  >
+                    Student
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 pb-3 pt-3 text-left text-sm font-semibold text-accent-foreground"
+                  >
+                    Fee
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 pb-3 pt-3 text-right text-sm font-semibold tabular-nums text-accent-foreground"
+                  >
+                    Pending
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 pb-3 pt-3 text-left text-sm font-semibold text-accent-foreground"
+                  >
+                    Due date
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 pb-3 pt-3 text-left text-sm font-semibold text-accent-foreground"
+                  >
+                    Days overdue
+                  </th>
+                  <th
+                    scope="col"
+                    className="whitespace-nowrap px-6 pb-3 pt-3 text-right text-sm font-semibold text-accent-foreground"
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
+              <tbody>
                 {data.data.map((row) => (
                   <tr
                     key={`${row.feeId}-${row.installmentId || "lump"}`}
                     className={cn(
-                      "transition-colors",
+                      "border-b border-card-border transition-colors",
                       rowToneClass(row.daysOverdue),
                     )}
                   >
-                    <td className="px-4 py-3 font-medium text-foreground">
-                      {row.studentName}
+                    <td className="px-6 py-4 align-middle">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <StudentAvatar
+                          name={row.studentName}
+                          photoUrl={row.photoUrl}
+                        />
+                        <Link
+                          to={`/students/${row.studentId}`}
+                          className="min-w-0 truncate font-semibold text-foreground hover:text-primary hover:underline"
+                        >
+                          {row.studentName}
+                        </Link>
+                      </div>
                     </td>
-                    <td className="max-w-[14rem] px-4 py-3 text-foreground/80">
+                    <td className="max-w-[16rem] px-6 py-4 align-middle text-sm text-muted-foreground">
                       <span className="line-clamp-2" title={row.feeTitle}>
                         {row.feeTitle}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                    <td className="px-6 py-4 align-middle text-right text-sm font-semibold tabular-nums text-foreground">
                       {formatMoney(row.pendingAmount)}
                     </td>
-                    <td className="px-4 py-3 text-foreground/80">
+                    <td className="px-6 py-4 align-middle text-sm tabular-nums text-muted-foreground">
                       {formatDate(row.dueDate)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-4 align-middle">
                       <span
                         className={cn(
-                          "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums",
+                          "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
                           daysBadgeClass(row.daysOverdue),
                         )}
                       >
                         {row.daysOverdue}d
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap justify-end gap-2">
+                    <td className="px-6 py-4 align-middle">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                         <Link
                           to={`/students/${row.studentId}`}
-                          className="inline-flex items-center justify-center rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground/90 transition-colors hover:bg-muted"
+                          className={cn(
+                            "inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-card-border bg-white px-3 text-sm font-medium text-foreground shadow-xs motion-reduce:transition-none",
+                            "transition-colors hover:bg-muted hover:text-primary",
+                          )}
                         >
                           Pay now
                         </Link>
                         <Button
                           type="button"
-                          className="px-3 py-1.5 text-sm"
+                          variant="secondary"
+                          className="h-9 shrink-0 px-3 text-sm shadow-xs"
                           disabled={
                             reminderMutation.isPending &&
                             reminderMutation.variables != null &&
@@ -459,22 +544,22 @@ export function OverduePage() {
         )}
 
         {reminderMutation.isError && (
-          <p className="border-t border-border/60 px-6 py-3 text-sm text-red-600">
+          <p className="border-t border-card-border px-6 py-3 text-sm text-red-600">
             {getErrorMessage(reminderMutation.error)}
           </p>
         )}
 
         {reminderMutation.isSuccess && reminderMutation.data?.ok === true && (
           <p
-            className="border-t border-border/60 px-6 py-3 text-sm text-primary"
+            className="border-t border-card-border px-6 py-3 text-sm text-primary"
             role="status"
           >
             {reminderMutation.data.message}
           </p>
         )}
 
-        {!isLoading && !isError && data && data.total > PAGE_SIZE && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
+        {!isLoading && !isError && data && data.totalPages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-card-border px-6 py-4">
             <p className="text-sm text-muted-foreground">
               Page {page} of {totalPages || 1}
             </p>
@@ -491,7 +576,7 @@ export function OverduePage() {
                 type="button"
                 variant="secondary"
                 disabled={!canNext}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => setPage((p) => (canNext ? p + 1 : p))}
               >
                 Next
               </Button>

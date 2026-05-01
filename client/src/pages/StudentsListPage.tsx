@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronsUpDown,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { ConfirmationModal } from "../components/ConfirmationModal";
 import {
   Button,
@@ -11,21 +18,112 @@ import {
 import { useAuthSession } from "../hooks/useAuthSession";
 import { useDebouncedString } from "../hooks/useDebouncedValue";
 import { useDeleteStudent } from "../hooks/useDeleteStudent";
-import { useStudents } from "../hooks/useStudents";
-import { STUDENT_CLASS_OPTIONS } from "../types";
-import type { StudentClass } from "../types";
-import { getErrorMessage } from "../utils";
+import { useStudentFeeOverview } from "../hooks/useStudentFeeOverview";
+import {
+  FEE_STATUS_OPTIONS,
+  STUDENT_CLASS_OPTIONS,
+  type FeeStatus,
+  type StudentClass,
+  type StudentFeeOverviewSortBy,
+} from "../types";
+import { cn, formatInr, getErrorMessage } from "../utils";
 
 const PAGE_SIZE = 20;
 
-function formatCourseDurationMonths(months: number | undefined): string {
-  if (months == null || !Number.isFinite(months)) return "—";
-  const n = Math.round(months);
-  return `${n} month${n === 1 ? "" : "s"}`;
+function feeStatusLabel(status: FeeStatus | null): string {
+  if (status == null) return "—";
+  return FEE_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
+}
+
+function initialFromName(name: string): string {
+  const t = name.trim();
+  const ch = t.charAt(0);
+  return ch ? ch.toUpperCase() : "?";
+}
+
+function StudentAvatar({
+  name,
+  photoUrl,
+}: {
+  name: string;
+  photoUrl?: string;
+}) {
+  const trimmed = photoUrl?.trim();
+  const [broken, setBroken] = useState(false);
+
+  if (trimmed && !broken) {
+    return (
+      <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full bg-primary/15 ring-1 ring-border/60">
+        <img
+          src={trimmed}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-primary"
+      aria-hidden
+    >
+      {initialFromName(name)}
+    </span>
+  );
+}
+
+/** Soft rollup status pills (distinct from denser solid badges elsewhere). */
+function RollupBadge({
+  status,
+  label,
+}: {
+  status: FeeStatus | null;
+  label: string;
+}) {
+  const tones = (() => {
+    if (status == null)
+      return "border border-border bg-muted/60 text-muted-foreground";
+    switch (status) {
+      case "PARTIAL":
+        return "bg-[#FFF3BF] text-[#ca6f0a]";
+      case "OVERDUE":
+        return "bg-[#FFE3E3] text-[#C92A2A]";
+      case "PENDING":
+        return "border border-primary/35 bg-accent/80 text-accent-foreground";
+      case "PAID":
+        return "border border-primary/50 bg-primary/15 text-[#134e4a]";
+      default:
+        return "border border-border bg-muted/60 text-muted-foreground";
+    }
+  })();
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+        tones,
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function studentIdSubtitle(s: {
+  scholarId?: string;
+  admissionId?: string;
+}): string | null {
+  const sch = s.scholarId?.trim();
+  if (sch) return `Student ID · ${sch}`;
+  const adm = s.admissionId?.trim();
+  if (adm) return `Student ID · ${adm}`;
+  return null;
 }
 
 /**
- * Paginated student list with optional search and class filters and CRUD entry points.
+ * Student list with fee rollup columns; Edit and Delete actions.
  */
 export function StudentsListPage() {
   const sessionQuery = useAuthSession();
@@ -35,23 +133,27 @@ export function StudentsListPage() {
   const [classFilter, setClassFilter] = useState<"" | StudentClass>("");
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebouncedString(searchInput, 300);
+  const [sortBy, setSortBy] = useState<StudentFeeOverviewSortBy>("studentName");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch]);
 
-  const { data, isLoading, isError, error } = useStudents({
+  const { data, isLoading, isError, error } = useStudentFeeOverview({
     page,
     limit: PAGE_SIZE,
     class: isSchool ? classFilter || undefined : undefined,
     search: debouncedSearch || undefined,
+    sortBy,
+    sortDir,
   });
+
   const deleteMutation = useDeleteStudent();
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
   } | null>(null);
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const showCreated = searchParams.get("created") === "1";
   const showUpdated = searchParams.get("updated") === "1";
@@ -64,6 +166,16 @@ export function StudentsListPage() {
     }, 5000);
     return () => window.clearTimeout(id);
   }, [showCreated, showUpdated, importedCount, setSearchParams]);
+
+  const toggleSort = (column: StudentFeeOverviewSortBy) => {
+    setPage(1);
+    if (sortBy === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir("asc");
+    }
+  };
 
   const confirmDeleteStudent = () => {
     if (!deleteTarget) return;
@@ -82,6 +194,54 @@ export function StudentsListPage() {
   ];
 
   const hasListFilters = Boolean((isSchool && classFilter) || debouncedSearch);
+
+  function SortableHeader({
+    label,
+    column,
+    className,
+  }: {
+    label: string;
+    column: StudentFeeOverviewSortBy;
+    className?: string;
+  }) {
+    const active = sortBy === column;
+    return (
+      <th scope="col" className={className}>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex w-full items-center justify-start gap-1.5 pb-3 pt-3 text-left text-sm font-semibold text-accent-foreground",
+            !active && "opacity-95",
+          )}
+          onClick={() => toggleSort(column)}
+        >
+          <span>{label}</span>
+          {active ? (
+            sortDir === "asc" ? (
+              <ArrowUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            ) : (
+              <ArrowDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            )
+          ) : (
+            <ChevronsUpDown
+              className="h-3.5 w-3.5 shrink-0 opacity-45"
+              aria-hidden
+            />
+          )}
+          <span className="sr-only">
+            {active
+              ? sortDir === "asc"
+                ? "sorted ascending"
+                : "sorted descending"
+              : "sort"}
+          </span>
+        </button>
+      </th>
+    );
+  }
+
+  const headerMuted =
+    "px-6 pb-3 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -163,7 +323,7 @@ export function StudentsListPage() {
           />
         </div>
         {isSchool && (
-          <div className="min-w-[12rem]">
+          <div className="min-w-48">
             <SelectField
               label="Class"
               name="filter-class"
@@ -180,7 +340,7 @@ export function StudentsListPage() {
         )}
       </div>
 
-      <Card className="p-0! overflow-hidden">
+      <Card className="overflow-hidden border-card-border p-0! shadow-md shadow-black/6">
         {isLoading && (
           <p className="px-6 py-8 text-sm text-muted-foreground">Loading…</p>
         )}
@@ -221,87 +381,135 @@ export function StudentsListPage() {
 
         {!isLoading && !isError && data && data.data.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] text-left text-sm">
-              <thead className="border-b border-border bg-primary-gradient text-primary-foreground">
-                <tr>
-                  <th className="px-6 py-3 font-medium">Student</th>
-                  <th className="px-6 py-3 font-medium">
-                    {isSchool ? "Class" : "Course"}
+            <table className="w-full min-w-4xl text-left">
+              <thead>
+                <tr className="border-b border-card-border bg-primary/10">
+                  <SortableHeader
+                    column="studentName"
+                    label="Student"
+                    className="px-6"
+                  />
+                  {isSchool ? (
+                    <SortableHeader column="class" label="Class" />
+                  ) : (
+                    <th scope="col" className="px-6 pb-3 pt-3 align-bottom">
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent-foreground">
+                        Course
+                      </span>
+                    </th>
+                  )}
+                  <th scope="col" className={headerMuted}>
+                    <span className="normal-case font-bold tracking-normal">
+                      Rollup
+                    </span>
                   </th>
-                  <th className="px-6 py-3 font-medium whitespace-nowrap">
-                    Scholar ID
+                  <SortableHeader
+                    column="pendingTotal"
+                    label="Pending"
+                    className="px-6"
+                  />
+                  <th scope="col" className={cn(headerMuted, "tabular-nums")}>
+                    <span className="normal-case tracking-normal">Fees</span>
                   </th>
-                  <th className="px-6 py-3 font-medium whitespace-nowrap">
-                    Course duration
+                  <th
+                    scope="col"
+                    className="whitespace-nowrap px-6 pb-3 pt-3 text-right align-bottom text-accent-foreground"
+                  >
+                    <span className="text-sm font-semibold">Actions</span>
                   </th>
-                  <th className="px-6 py-3 font-medium">Parent</th>
-                  <th className="px-6 py-3 font-medium">Phone</th>
-                  <th className="px-6 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
-                {data.data.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="cursor-pointer bg-card transition-colors hover:bg-muted/80"
-                    onClick={() => navigate(`/students/${s.id}`)}
-                    aria-label={`Open profile for ${s.studentName}`}
-                  >
-                    <td className="px-6 py-3 font-medium text-foreground">
-                      {s.studentName}
-                    </td>
-                    <td className="px-6 py-3 text-muted-foreground">
-                      {isSchool
-                        ? `${s.class ?? "—"} · ${s.section ?? "—"}`
-                        : (s.course?.name ?? s.courseId ?? "—")}
-                    </td>
-                    <td className="px-6 py-3 font-mono text-sm tabular-nums text-muted-foreground">
-                      {s.scholarId?.trim() ? s.scholarId : "—"}
-                    </td>
-                    <td className="px-6 py-3 tabular-nums text-muted-foreground">
-                      {formatCourseDurationMonths(s.courseDurationMonths)}
-                    </td>
-                    <td className="px-6 py-3 text-muted-foreground">
-                      {s.parentName}
-                    </td>
-                    <td className="px-6 py-3 tabular-nums text-muted-foreground">
-                      {s.parentPhoneNumber}
-                    </td>
-                    <td className="px-6 py-3 text-right">
-                      <div
-                        className="flex flex-wrap items-center justify-end gap-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Link
-                          to={`/students/${s.id}/edit`}
-                          className="text-sm font-medium text-primary hover:underline"
-                        >
-                          Edit
-                        </Link>
-                        <button
-                          type="button"
-                          className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
-                          disabled={deleteMutation.isPending}
-                          onClick={() =>
-                            setDeleteTarget({
-                              id: s.id,
-                              name: s.studentName,
-                            })
-                          }
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+              <tbody>
+                {data.data.map((row) => {
+                  const { student, feeSummary } = row;
+                  const idLine = studentIdSubtitle(student);
+
+                  const courseDisplay = isSchool
+                    ? `${student.class ?? "—"} · ${student.section ?? "—"}`
+                    : (student.course?.name ?? student.courseId) || "—";
+
+                  return (
+                    <tr
+                      key={student.id}
+                      className="border-b border-card-border bg-card hover:bg-muted/40"
+                    >
+                      <td className="px-6 py-4 align-middle">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <StudentAvatar
+                            name={student.studentName}
+                            photoUrl={student.photoUrl}
+                          />
+                          <div className="min-w-0">
+                            <Link
+                              to={`/students/${student.id}`}
+                              className="truncate font-semibold text-foreground hover:text-primary hover:underline"
+                            >
+                              {student.studentName}
+                            </Link>
+                            {idLine ? (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {idLine}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 align-middle text-sm text-muted-foreground">
+                        {courseDisplay}
+                      </td>
+                      <td className="px-6 py-4 align-middle">
+                        <RollupBadge
+                          status={feeSummary.rollupStatus}
+                          label={feeStatusLabel(feeSummary.rollupStatus)}
+                        />
+                      </td>
+                      <td className="px-6 py-4 align-middle text-sm font-semibold tabular-nums text-foreground">
+                        {formatInr(feeSummary.pendingTotal)}
+                      </td>
+                      <td className="px-6 py-4 align-middle text-sm font-semibold tabular-nums text-foreground">
+                        {feeSummary.feeCount}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 align-middle">
+                        <div className="flex items-center justify-end gap-1">
+                          <Link
+                            to={`/students/${student.id}/edit`}
+                            className={cn(
+                              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-card-border bg-white text-muted-foreground shadow-xs motion-reduce:transition-none",
+                              "transition-colors hover:bg-muted hover:text-primary",
+                            )}
+                            aria-label={`Edit ${student.studentName}`}
+                          >
+                            <Pencil className="h-4 w-4 shrink-0" aria-hidden />
+                          </Link>
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-card-border bg-white text-muted-foreground shadow-xs motion-reduce:transition-none",
+                              "transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50",
+                            )}
+                            disabled={deleteMutation.isPending}
+                            onClick={() =>
+                              setDeleteTarget({
+                                id: student.id,
+                                name: student.studentName,
+                              })
+                            }
+                            aria-label={`Delete ${student.studentName}`}
+                          >
+                            <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
 
         {!isLoading && !isError && data && data.totalPages > 1 && (
-          <div className="flex flex-col items-stretch justify-between gap-3 border-t border-border px-6 py-4 sm:flex-row sm:items-center">
+          <div className="flex flex-col items-stretch justify-between gap-3 border-t border-card-border px-6 py-4 sm:flex-row sm:items-center">
             <p className="text-sm text-muted-foreground">
               Page {data.page} of {data.totalPages}
             </p>
