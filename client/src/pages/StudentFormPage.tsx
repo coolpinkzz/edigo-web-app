@@ -96,6 +96,14 @@ export function StudentFormPage() {
   const createMutation = useCreateStudent();
   const updateMutation = useUpdateStudent();
 
+  const newStudentFormDefaults = useMemo<CreateStudentFormValues>(
+    () => ({
+      ...DEFAULT_VALUES,
+      assignmentAnchorDate: todayISODate(),
+    }),
+    [],
+  );
+
   const {
     register,
     control,
@@ -109,7 +117,7 @@ export function StudentFormPage() {
   } = useForm<CreateStudentFormValues>({
     mode: "onTouched",
     reValidateMode: "onChange",
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: isEdit ? DEFAULT_VALUES : newStudentFormDefaults,
   });
 
   const {
@@ -247,6 +255,7 @@ export function StudentFormPage() {
   const useCustomInstallmentsWatch = watch("useCustomInstallments");
   const customInstallmentsWatch = watch("customInstallments");
   const feeTemplateDiscountPercentWatch = watch("feeTemplateDiscountPercent");
+  const assignmentAnchorDateWatch = watch("assignmentAnchorDate");
   const hasDiscountLockingCustomInstallments = useMemo(() => {
     const t = String(feeTemplateDiscountPercentWatch ?? "").trim();
     if (t === "") return false;
@@ -282,8 +291,11 @@ export function StudentFormPage() {
 
   const defaultCustomInstallmentRows = useMemo(() => {
     if (!selectedFeeTemplateDetails?.isInstallment) return [];
+    const trimmed = String(assignmentAnchorDateWatch ?? "").trim();
     const baseDate =
-      selectedFeeTemplateDetails.installmentAnchorDate || todayISODate();
+      trimmed !== "" && !Number.isNaN(ymdToBusinessMidnightMs(trimmed))
+        ? trimmed
+        : todayISODate();
     return selectedFeeTemplateDetails.defaultInstallments
       .slice()
       .sort((a, b) => a.dueInDays - b.dueInDays)
@@ -291,11 +303,22 @@ export function StudentFormPage() {
         amount: Number(row.amount),
         dueDate: addDaysToISODate(baseDate, row.dueInDays),
       }));
-  }, [selectedFeeTemplateDetails]);
+  }, [assignmentAnchorDateWatch, selectedFeeTemplateDetails]);
 
   const isInstallmentTemplateSelected =
     hasFeeTemplateSelected &&
     selectedFeeTemplateDetails?.isInstallment === true;
+
+  const prevInstallmentTemplateIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isInstallmentTemplateSelected) {
+      prevInstallmentTemplateIdRef.current = null;
+      return;
+    }
+    if (prevInstallmentTemplateIdRef.current === selectedTemplateId) return;
+    prevInstallmentTemplateIdRef.current = selectedTemplateId;
+    setValue("assignmentAnchorDate", todayISODate());
+  }, [isInstallmentTemplateSelected, selectedTemplateId, setValue]);
 
   useEffect(() => {
     if (!hasFeeTemplateSelected) {
@@ -306,7 +329,9 @@ export function StudentFormPage() {
     }
 
     if (selectedFeeTemplateDetails?.isInstallment) {
-      replaceCustomInstallments(defaultCustomInstallmentRows);
+      if (!useCustomInstallmentsWatch) {
+        replaceCustomInstallments(defaultCustomInstallmentRows);
+      }
       return;
     }
 
@@ -318,6 +343,7 @@ export function StudentFormPage() {
     replaceCustomInstallments,
     selectedFeeTemplateDetails?.isInstallment,
     setValue,
+    useCustomInstallmentsWatch,
   ]);
 
   useEffect(() => {
@@ -364,7 +390,7 @@ export function StudentFormPage() {
 
   if (sessionQuery.isLoading) {
     return (
-      <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-10">
         <p className="text-sm text-muted-foreground">Loading session…</p>
       </div>
     );
@@ -372,7 +398,7 @@ export function StudentFormPage() {
 
   if (sessionQuery.isError) {
     return (
-      <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-10">
         <p className="text-sm text-red-600" role="alert">
           Could not load organization settings. Try refreshing the page.
         </p>
@@ -388,7 +414,7 @@ export function StudentFormPage() {
 
   if (isEdit && studentQuery.isLoading) {
     return (
-      <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-10">
         <p className="text-sm text-muted-foreground">Loading student…</p>
       </div>
     );
@@ -396,7 +422,7 @@ export function StudentFormPage() {
 
   if (isEdit && studentQuery.isError) {
     return (
-      <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-10">
         <p className="text-sm text-red-600" role="alert">
           {studentQuery.error instanceof Error
             ? studentQuery.error.message
@@ -414,7 +440,7 @@ export function StudentFormPage() {
 
   if (!isSchool && coursesQuery.isError) {
     return (
-      <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-10">
         <p className="text-sm text-red-600" role="alert">
           Could not load courses. Add courses under Courses in the sidebar, then
           try again.
@@ -430,7 +456,7 @@ export function StudentFormPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center px-4 py-10">
+    <div className="mx-auto max-w-2xl px-4 py-10">
       <Card className="w-full transition-shadow duration-300">
         <div className="mb-6">
           <CardTitle>{isEdit ? "Edit student" : "Add student"}</CardTitle>

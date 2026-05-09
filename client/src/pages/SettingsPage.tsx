@@ -1,12 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
-import {
-  Check,
-  ChevronDown,
-  CircleAlert,
-  Lock,
-} from "lucide-react";
+import { Check, ChevronDown, CircleAlert, Lock } from "lucide-react";
 import {
   createRazorpayLinkedAccount,
   createRazorpayRouteSettlements,
@@ -785,18 +780,17 @@ export function SettingsPage() {
         ) : (
           <div className="mt-8 space-y-6">
             <div className="rounded-lg border border-emerald-600/20 bg-emerald-500/8 px-4 py-4 text-sm dark:bg-emerald-500/10">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="inline-flex items-center rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm dark:bg-emerald-500">
-                  Business verified
-                </span>
+              <div className="flex w-full flex-wrap items-center gap-2">
                 {rp.status ? (
-                  <span className="text-xs font-medium capitalize text-foreground/90">
-                    <span className="text-muted-foreground" aria-hidden>
-                      ·
-                    </span>{" "}
+                  <span className="min-w-0 grow text-xs font-medium capitalize text-foreground/90">
                     {rp.status.replace(/_/g, " ")}
                   </span>
-                ) : null}
+                ) : (
+                  <span className="grow" aria-hidden />
+                )}
+                <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm dark:bg-emerald-500">
+                  Business verified
+                </span>
               </div>
               <p className="mt-2 font-medium leading-snug text-foreground">
                 {rp.remote?.legalBusinessName ??
@@ -822,30 +816,18 @@ export function SettingsPage() {
                   ) : null}
                 </dl>
               ) : null}
-              {rp.accountId || rp.remote?.businessType ? (
-                <details className="group mt-4 border-t border-emerald-600/15 pt-4 dark:border-emerald-500/20">
-                  <summary className="cursor-pointer list-none text-xs font-medium text-primary [&::-webkit-details-marker]:hidden">
-                    <span className="underline underline-offset-2">
-                      Technical identifiers
-                    </span>
-                  </summary>
-                  <div className="mt-3 space-y-1.5 rounded-md bg-background/70 px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                    {rp.accountId ? <p>{rp.accountId}</p> : null}
-                  </div>
-                </details>
-              ) : null}
             </div>
 
             {route.payoutsReady ? (
               <div className="rounded-lg border border-emerald-600/30 bg-emerald-500/10 px-4 py-3 text-sm text-foreground">
-                <p className="font-medium">Payouts are active</p>
-                <p className="mt-1 text-muted-foreground">
-                  Status:{" "}
-                  <span className="capitalize text-foreground">
-                    {activationStatus ?? "activated"}
+                <div className="flex w-full flex-wrap items-start gap-2">
+                  <p className="min-w-0 grow font-medium leading-snug">
+                    Payouts are active
+                  </p>
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold capitalize text-white shadow-sm dark:bg-emerald-500">
+                    {(activationStatus ?? "activated").replace(/_/g, " ")}
                   </span>
-                  . Route settlements are configured with Razorpay.
-                </p>
+                </div>
               </div>
             ) : null}
 

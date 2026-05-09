@@ -152,8 +152,11 @@ export function MainLayout() {
   };
 
   return (
-    <div className="flex h-screen min-h-0 w-full bg-background text-foreground">
-      <aside className="flex h-full min-h-0 w-56 shrink-0 flex-col overflow-hidden border-r border-border bg-card">
+    <div className="flex h-screen max-h-screen min-h-0 w-full overflow-hidden bg-background text-foreground">
+      <aside
+        aria-label="Main navigation"
+        className="fixed inset-y-0 left-0 z-30 flex w-56 shrink-0 flex-col overflow-hidden border-r border-border bg-card"
+      >
         <div className="shrink-0 px-4 py-4">
           <Link to="/dashboard" className="flex items-center gap-2">
             <img
@@ -168,7 +171,7 @@ export function MainLayout() {
             </span>
           </Link>
         </div>
-        <nav className="flex min-h-0 flex-1 flex-col justify-start gap-1 overflow-hidden p-3">
+        <nav className="flex min-h-0 flex-1 flex-col justify-start gap-1 overflow-y-auto overflow-x-hidden p-3">
           {showDashboardStudents &&
             navLink("/dashboard", "Dashboard", LayoutDashboard)}
           {showFeeNav && navLink("/quotations", "Quotations", FileText)}
@@ -217,7 +220,7 @@ export function MainLayout() {
         </div>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col pl-56">
         <header className="shrink-0 border-b border-border bg-card px-6 py-4">
           <div className="flex min-w-0 items-center gap-3">
             {showHeaderTenantLogo && (
@@ -235,7 +238,7 @@ export function MainLayout() {
             </h1>
           </div>
         </header>
-        <main className="min-h-0 flex-1 p-6">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-6">
           <Outlet />
         </main>
       </div>
