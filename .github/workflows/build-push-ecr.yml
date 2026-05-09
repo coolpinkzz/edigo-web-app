@@ -66,6 +66,9 @@ jobs:
         with:
           context: ./server
           file: ./server/Dockerfile
+          # ECS tasks on EC2/Fargate are commonly linux/amd64.
+          # Building explicitly avoids "exec format error" from arch mismatch.
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
