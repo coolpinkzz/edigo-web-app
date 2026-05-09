@@ -27,7 +27,8 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1
+  # Must match the region where the ECR repository exists (console: Asia Pacific — Mumbai).
+  AWS_REGION: ap-south-1
   ECR_REPOSITORY: edigo-api
 
 jobs:
