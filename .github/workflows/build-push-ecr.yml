@@ -1,0 +1,66 @@
+# Builds the fee-collection server image and pushes to Amazon ECR.
+#
+# Required GitHub secrets:
+#   AWS_ACCESS_KEY_ID       — IAM user key with ecr:GetAuthorizationToken, ecr:BatchCheckLayerAvailability,
+#                             ecr:CompleteLayerUpload, ecr:InitiateLayerUpload, ecr:PutImage, ecr:UploadLayerPart,
+#                             and ecr:BatchGetImage on the target repository (or use AmazonEC2ContainerRegistryPowerUser).
+#   AWS_SECRET_ACCESS_KEY   — Matching secret key.
+#
+# Optional: use OIDC instead of long-lived keys — set permissions.id-token: write, add role-to-assume to
+# configure-aws-credentials, and remove the access key fields. See:
+# https://github.com/aws-actions/configure-aws-credentials#OIDC
+#
+# Create the ECR repository once (AWS Console or CLI):
+#   aws ecr create-repository --repository-name YOUR_REPO_NAME --region YOUR_REGION
+
+name: Build and push server to ECR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/build-push-ecr.yml"
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: edigo-api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          REPO="${{ env.ECR_REPOSITORY }}"
+          SHA_TAG="${GITHUB_SHA:0:8}"
+          echo "image=${REGISTRY}/${REPO}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${SHA_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.image }}:latest
+          provenance: false
